@@ -62,3 +62,5 @@ __pycache__/
 # ───────────────────────────────────────────
 tools/
 assets/dices/*/
+!assets/dices/come_quando_fuori_piove/
+!assets/dices/come_quando_fuori_piove/**
