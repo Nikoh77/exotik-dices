@@ -276,7 +276,7 @@ Hooks.once("ready", () => {
         game.settings.set(MODULE_ID, "diceDefinitions", defs);
         console.log(`${MODULE_ID} | Migrated geometry values`);
     }
-};);
+});
 
 /* ---------------------------------------- */
 /*  Chat Message Rendering                   */
@@ -582,4 +582,4 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(
         `${MODULE_ID} | Geometry swap installed for: ${[...denomToGeo.keys()].join(", ")}`,
     );
-};);
+});
