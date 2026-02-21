@@ -185,13 +185,27 @@ export class ExotikDiceConfig extends FormApplication {
         // ── Delegated click handler (works for both modes) ──
         el.addEventListener("click", (event) => {
             const t = event.target;
-            if (t.closest(".ekd-add-dice")) return this._onAddDice(event);
-            if (t.closest(".ekd-edit")) return this._onEditDice(event);
-            if (t.closest(".ekd-delete")) return this._onDeleteDice(event);
+
+            if (t.closest(".ekd-add-dice")) {
+                event.preventDefault();
+                event.stopPropagation();
+                return this._onAddDice(event);
+            }
+            if (t.closest(".ekd-edit")) {
+                event.preventDefault();
+                event.stopPropagation();
+                return this._onEditDice(event);
+            }
+            if (t.closest(".ekd-delete")) {
+                event.preventDefault();
+                event.stopPropagation();
+                return this._onDeleteDice(event);
+            }
             if (t.closest(".ekd-back")) {
                 event.preventDefault();
+                event.stopPropagation();
                 this._editingDice = null;
-                this.render(true);
+                setTimeout(() => this.render(true), 0);
             }
         });
 
@@ -227,7 +241,7 @@ export class ExotikDiceConfig extends FormApplication {
                 icon: "",
             })),
         };
-        this.render(true);
+        setTimeout(() => this.render(true), 0);
     }
 
     _onEditDice(event) {
@@ -241,7 +255,7 @@ export class ExotikDiceConfig extends FormApplication {
         const dice = definitions.find((d) => d.id === id);
         if (!dice) return;
         this._editingDice = foundry.utils.deepClone(dice);
-        this.render(true);
+        setTimeout(() => this.render(true), 0);
     }
 
     async _onDeleteDice(event) {
@@ -277,7 +291,7 @@ export class ExotikDiceConfig extends FormApplication {
         if (this._editingDice.faces !== 6) {
             this._editingDice.geometry = "standard";
         }
-        this.render(true);
+        setTimeout(() => this.render(true), 0);
     }
 
     _onImageChange(event) {
