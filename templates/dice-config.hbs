@@ -88,7 +88,7 @@
                            value="{{this.texture}}" placeholder="path/to/image.png" />
                 </div>
                 <img src="{{this.texture}}" class="ekd-face-preview"
-                     style="{{unless this.texture 'display:none'}}" alt="" />
+                     style="{{#unless this.texture}}display:none{{/unless}}" alt="" />
             </div>
 
             <div class="form-group">
@@ -102,7 +102,7 @@
                            value="{{this.bump}}" placeholder="path/to/bump.png" />
                 </div>
                 <img src="{{this.bump}}" class="ekd-face-preview"
-                     style="{{unless this.bump 'display:none'}}" alt="" />
+                     style="{{#unless this.bump}}display:none{{/unless}}" alt="" />
             </div>
 
             <div class="form-group">
@@ -116,7 +116,7 @@
                            value="{{this.icon}}" placeholder="path/to/icon.svg" />
                 </div>
                 <img src="{{this.icon}}" class="ekd-face-preview"
-                     style="{{unless this.icon 'display:none'}}" alt="" />
+                     style="{{#unless this.icon}}display:none{{/unless}}" alt="" />
             </div>
 
         </fieldset>
