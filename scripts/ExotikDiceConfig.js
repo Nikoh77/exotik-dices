@@ -170,38 +170,38 @@ export class ExotikDiceConfig extends FormApplication {
     /** @override */
     activateListeners(html) {
         super.activateListeners(html);
-        const el = html[0] || html;
 
+        // Foundry v13: html can be jQuery or raw HTMLElement
+        const el = html instanceof HTMLElement ? html : html?.[0] ?? html;
+        if (!el) {
+            console.error(`${MODULE_ID} | activateListeners: root element not found`);
+            return;
+        }
+
+        console.log(
+            `${MODULE_ID} | activateListeners – mode: ${this._editingDice ? "editor" : "list"}`,
+        );
+
+        // ── Delegated click handler (works for both modes) ──
+        el.addEventListener("click", (event) => {
+            const t = event.target;
+            if (t.closest(".ekd-add-dice")) return this._onAddDice(event);
+            if (t.closest(".ekd-edit")) return this._onEditDice(event);
+            if (t.closest(".ekd-delete")) return this._onDeleteDice(event);
+            if (t.closest(".ekd-back")) {
+                event.preventDefault();
+                this._editingDice = null;
+                this.render(true);
+            }
+        });
+
+        // ── Editor-specific listeners ──
         if (this._editingDice) {
-            // ── Editor listeners ──
-            const facesSelect = el.querySelector('[name="faces"]');
-            if (facesSelect) {
-                facesSelect.addEventListener("change", (e) =>
-                    this._onFacesChange(e),
-                );
-            }
-            const backBtn = el.querySelector(".ekd-back");
-            if (backBtn) {
-                backBtn.addEventListener("click", (e) => {
-                    e.preventDefault();
-                    this._editingDice = null;
-                    this.render();
-                });
-            }
-            // Live image previews
+            el.querySelector('[name="faces"]')
+              ?.addEventListener("change", (e) => this._onFacesChange(e));
+
             el.querySelectorAll("input.image").forEach((input) => {
                 input.addEventListener("change", (e) => this._onImageChange(e));
-            });
-        } else {
-            // ── List listeners ──
-            el.querySelectorAll(".ekd-add-dice").forEach((btn) => {
-                btn.addEventListener("click", (e) => this._onAddDice(e));
-            });
-            el.querySelectorAll(".ekd-edit").forEach((btn) => {
-                btn.addEventListener("click", (e) => this._onEditDice(e));
-            });
-            el.querySelectorAll(".ekd-delete").forEach((btn) => {
-                btn.addEventListener("click", (e) => this._onDeleteDice(e));
             });
         }
     }
@@ -212,6 +212,7 @@ export class ExotikDiceConfig extends FormApplication {
 
     _onAddDice(event) {
         event.preventDefault();
+        console.log(`${MODULE_ID} | _onAddDice`);
         this._editingDice = {
             id: foundry.utils.randomID(),
             name: "",
@@ -226,27 +227,29 @@ export class ExotikDiceConfig extends FormApplication {
                 icon: "",
             })),
         };
-        this.render();
+        this.render(true);
     }
 
     _onEditDice(event) {
         event.preventDefault();
-        const id =
-            event.currentTarget.closest("[data-id]")?.dataset.id ||
-            event.currentTarget.dataset.id;
+        const entry = event.target.closest("[data-id]");
+        const id = entry?.dataset?.id;
+        console.log(`${MODULE_ID} | _onEditDice id=${id}`);
+        if (!id) return;
         const definitions =
             game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = definitions.find((d) => d.id === id);
         if (!dice) return;
         this._editingDice = foundry.utils.deepClone(dice);
-        this.render();
+        this.render(true);
     }
 
     async _onDeleteDice(event) {
         event.preventDefault();
-        const id =
-            event.currentTarget.closest("[data-id]")?.dataset.id ||
-            event.currentTarget.dataset.id;
+        const entry = event.target.closest("[data-id]");
+        const id = entry?.dataset?.id;
+        console.log(`${MODULE_ID} | _onDeleteDice id=${id}`);
+        if (!id) return;
         const definitions =
             game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = definitions.find((d) => d.id === id);
@@ -260,7 +263,7 @@ export class ExotikDiceConfig extends FormApplication {
 
         const updated = definitions.filter((d) => d.id !== id);
         await game.settings.set(MODULE_ID, "diceDefinitions", updated);
-        this.render();
+        this.render(true);
         this._promptReload();
     }
 
@@ -274,7 +277,7 @@ export class ExotikDiceConfig extends FormApplication {
         if (this._editingDice.faces !== 6) {
             this._editingDice.geometry = "standard";
         }
-        this.render();
+        this.render(true);
     }
 
     _onImageChange(event) {
@@ -394,7 +397,7 @@ export class ExotikDiceConfig extends FormApplication {
 
         // Go back to list
         this._editingDice = null;
-        this.render();
+        this.render(true);
         this._promptReload();
     }
 

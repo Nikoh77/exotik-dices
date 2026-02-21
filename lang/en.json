@@ -46,7 +46,8 @@
             "FaceBump": "Bump Map (3D)",
             "FaceIcon": "Chat Icon",
             "AssetFolder": "Asset Folder",
-            "AssetFolderHint": "Folders are created automatically when saving. Place your images in the appropriate subfolder."
+            "AssetFolderHint": "Folders are created automatically when saving. Place your images in the appropriate subfolder.",
+            "Save": "Save"
         },
 
         "Validation": {

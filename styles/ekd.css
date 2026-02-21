@@ -184,3 +184,8 @@
     word-break: break-all;
 }
 
+/* Editor footer with Save button */
+.ekd-editor-footer {
+    margin-top: 10px;
+    text-align: right;
+}

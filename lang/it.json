@@ -46,7 +46,8 @@
             "FaceBump": "Bump Map (3D)",
             "FaceIcon": "Icona Chat",
             "AssetFolder": "Cartella Asset",
-            "AssetFolderHint": "Le cartelle vengono create automaticamente al salvataggio. Posiziona le immagini nella sottocartella appropriata."
+            "AssetFolderHint": "Le cartelle vengono create automaticamente al salvataggio. Posiziona le immagini nella sottocartella appropriata.",
+            "Save": "Salva"
         },
 
         "Validation": {
