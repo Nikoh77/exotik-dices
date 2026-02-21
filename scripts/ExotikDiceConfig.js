@@ -1,23 +1,23 @@
 /**
- * ExotikDiceConfig – Unified configuration window for Exotik Dices.
- * Displays either a list of defined dice (with Add/Edit/Delete) or
- * the editor for a single dice, all within the same window.
- * Registered as a settings menu via game.settings.registerMenu().
+ * ExotikDiceConfig – Configuration window for Exotik Dices.
+ * Handles the dice editor with face references, dirty tracking,
+ * dynamic geometry discovery, and 3D CSS preview.
+ *
+ * Two entry points:
+ *  1. registerMenu fallback → list view
+ *  2. ExotikDiceConfig.editDice() → editor (used by settings injection)
  */
 
 const MODULE_ID = "exotik-dices";
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
-
-/** Denominations reserved by Foundry core */
-const RESERVED_DENOMS = new Set(["d", "f", "c"]);
+const GEOMETRIES_PATH = `modules/${MODULE_ID}/assets/geometries`;
 
 /** Supported face counts */
 const FACE_OPTIONS = [4, 6, 8, 10, 12, 20];
 
-/**
- * Convert a dice name to a filesystem-safe slug.
- * e.g. "My Cool Dice!" → "my_cool_dice"
- */
+/* ─── Utility functions ─── */
+
+/** Convert a dice name to a filesystem-safe slug. */
 function nameToSlug(name) {
     return (name || "")
         .trim()
@@ -26,21 +26,42 @@ function nameToSlug(name) {
         .replace(/^_|_$/g, "");
 }
 
-/**
- * Build the conventional asset base path for a dice slug.
- * @param {string} slug
- * @returns {string}  e.g. "modules/exotik-dices/assets/dices/my_dice"
- */
+/** Build the conventional asset base path. */
 function diceBasePath(slug) {
     return `${DICES_PATH}/${slug}`;
 }
 
 /**
- * Create the three asset sub-folders for a dice on the server.
- * Uses Foundry's FilePicker.createDirectory (requires GM permissions).
- * Silently ignores "already exists" errors.
- * @param {string} slug
+ * Resolve a face reference chain to the actual face.
+ * Returns the resolved face object or null if loop/invalid.
  */
+export function resolveFace(faceMap, index, visited = new Set()) {
+    if (index == null || index < 0 || index >= faceMap.length) return null;
+    const face = faceMap[index];
+    if (!face) return null;
+    if (face.refFace == null) return face;
+    if (visited.has(index)) return null;
+    visited.add(index);
+    return resolveFace(faceMap, face.refFace, visited);
+}
+
+/**
+ * Would setting faceMap[fromIdx].refFace = toIdx create a loop?
+ */
+function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
+    const visited = new Set();
+    let current = toIdx;
+    while (current != null) {
+        if (current === fromIdx) return true;
+        if (visited.has(current)) return false;
+        if (current < 0 || current >= faceCount) return false;
+        visited.add(current);
+        current = faceMap[current]?.refFace ?? null;
+    }
+    return false;
+}
+
+/** Create asset sub-folders for a dice on the server. */
 async function ensureDiceFolders(slug) {
     const base = `assets/dices/${slug}`;
     const dirs = [
@@ -56,7 +77,6 @@ async function ensureDiceFolders(slug) {
                 `modules/${MODULE_ID}/${dir}`,
             );
         } catch (e) {
-            // Folder already exists – that's fine
             if (
                 !e.message?.includes("EEXIST") &&
                 !e.message?.includes("already exists")
@@ -70,19 +90,143 @@ async function ensureDiceFolders(slug) {
     }
 }
 
+/* ─── Exported helpers ─── */
+
+/** Show the reload-world dialog. */
+export function promptReload() {
+    new Dialog({
+        title: game.i18n.localize("EKD.Config.ReloadRequired"),
+        content: `<p>${game.i18n.localize("EKD.Config.ReloadRequiredMsg")}</p>`,
+        buttons: {
+            reload: {
+                icon: '<i class="fas fa-sync"></i>',
+                label: game.i18n.localize("EKD.Config.ReloadNow"),
+                callback: () => window.location.reload(),
+            },
+            later: {
+                icon: '<i class="fas fa-clock"></i>',
+                label: game.i18n.localize("EKD.Config.ReloadLater"),
+            },
+        },
+        default: "reload",
+    }).render(true);
+}
+
+/** Simple markdown → HTML for README display. */
+export function markdownToHtml(md) {
+    return md
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/^#### (.+)$/gm, "<h4>$1</h4>")
+        .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+        .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+        .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>")
+        .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+        .replace(/```[\s\S]*?```/g, (m) => {
+            const inner = m.replace(/```\w*\n?/, "").replace(/```$/, "");
+            return `<pre><code>${inner}</code></pre>`;
+        })
+        .replace(/^\- (.+)$/gm, "<li>$1</li>")
+        .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
+        .replace(/((?:<li>.*<\/li>\s*)+)/g, "<ul>$1</ul>")
+        .replace(/\n{2,}/g, "<br>");
+}
+
+/* ═══════════════════════════════════════════════ */
+/*  ExotikDiceConfig FormApplication              */
+/* ═══════════════════════════════════════════════ */
+
 export class ExotikDiceConfig extends FormApplication {
+    /** @type {Array|null} Cached custom geometry scan results. */
+    static _geometriesCache = null;
+
     constructor(object = {}, options = {}) {
         super(object, options);
-        /** null = list view, object = editing that dice */
+        /** null = list view; object = editing that dice. */
         this._editingDice = null;
+        /** Reference to the SettingsConfig app (for refresh after save). */
+        this._settingsApp = null;
+        /** Serialized form data at render time (for dirty tracking). */
+        this._originalSnapshot = null;
     }
 
-    /** @override */
+    /* ── Geometry scanning ── */
+
+    /**
+     * Scan the geometries folder for .glb files.
+     * Filename convention: *_d{N}.glb → N is face count.
+     */
+    static async scanGeometries() {
+        if (ExotikDiceConfig._geometriesCache)
+            return ExotikDiceConfig._geometriesCache;
+        try {
+            const result = await FilePicker.browse("data", GEOMETRIES_PATH);
+            const geos = [];
+            for (const fp of result.files || []) {
+                if (!fp.endsWith(".glb")) continue;
+                const filename = fp.split("/").pop().replace(".glb", "");
+                const m = filename.match(/_d(\d+)/);
+                if (!m) continue;
+                geos.push({
+                    file: fp,
+                    faces: parseInt(m[1]),
+                    name: filename
+                        .replace(/_d\d+$/, "")
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase()),
+                    value: filename,
+                });
+            }
+            ExotikDiceConfig._geometriesCache = geos;
+            return geos;
+        } catch (e) {
+            console.warn(`${MODULE_ID} | scanGeometries:`, e);
+            return [];
+        }
+    }
+
+    /* ── Static entry point ── */
+
+    /**
+     * Open the editor for a dice definition (or new dice).
+     * @param {object|null} dice   Existing dice def, or null for new
+     * @param {Application|null} settingsApp  SettingsConfig to refresh on save
+     */
+    static editDice(dice = null, settingsApp = null) {
+        const config = new ExotikDiceConfig();
+        config._settingsApp = settingsApp;
+        if (dice) {
+            config._editingDice = foundry.utils.deepClone(dice);
+        } else {
+            config._editingDice = {
+                id: foundry.utils.randomID(),
+                name: "",
+                slug: "",
+                denomination: "",
+                faces: 6,
+                geometry: "standard",
+                faceMap: Array.from({ length: 6 }, () => ({
+                    refFace: null,
+                    label: "",
+                    texture: "",
+                    bump: "",
+                    icon: "",
+                })),
+            };
+        }
+        config.render(true);
+    }
+
+    /* ── FormApplication overrides ── */
+
     static get defaultOptions() {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "ekd-dice-config",
             template: `modules/${MODULE_ID}/templates/dice-config.hbs`,
-            width: 620,
+            width: 640,
             height: "auto",
             closeOnSubmit: false,
             submitOnChange: false,
@@ -91,7 +235,6 @@ export class ExotikDiceConfig extends FormApplication {
         });
     }
 
-    /** @override */
     get title() {
         if (this._editingDice) {
             return this._editingDice.name
@@ -103,89 +246,138 @@ export class ExotikDiceConfig extends FormApplication {
         return game.i18n.localize("EKD.Config.Title");
     }
 
-    /** @override */
+    /** Scan geometries before every render. */
+    async _render(force, options) {
+        if (!ExotikDiceConfig._geometriesCache) {
+            await ExotikDiceConfig.scanGeometries();
+        }
+        return super._render(force, options);
+    }
+
+    /* ── Data for Handlebars ── */
+
     getData() {
-        // ── Editor mode ──
-        if (this._editingDice) {
-            const d = this._editingDice;
-            const faceCount = d.faces || 6;
-            const faceMap = d.faceMap || [];
-            const faces = [];
-            for (let i = 0; i < faceCount; i++) {
-                faces.push({
-                    number: i + 1,
-                    label: faceMap[i]?.label ?? "",
-                    texture: faceMap[i]?.texture ?? "",
-                    bump: faceMap[i]?.bump ?? "",
-                    icon: faceMap[i]?.icon ?? "",
+        return this._editingDice ? this._getEditorData() : this._getListData();
+    }
+
+    _getEditorData() {
+        const d = this._editingDice;
+        const faceCount = d.faces || 6;
+        const faceMap = d.faceMap || [];
+
+        // Build face entries with reference info
+        const faces = [];
+        for (let i = 0; i < faceCount; i++) {
+            const fm = faceMap[i] || {};
+            const currentRef = fm.refFace ?? null;
+            const isRef = currentRef != null;
+
+            // Allowed reference targets (exclude self + loop-causing)
+            const allowedRefs = [];
+            for (let j = 0; j < faceCount; j++) {
+                if (j === i) continue;
+                if (wouldCreateLoop(faceMap, faceCount, i, j)) continue;
+                allowedRefs.push({
+                    value: j,
+                    label: String(j + 1),
+                    selected: currentRef === j,
                 });
             }
 
-            const facesOptions = FACE_OPTIONS.map((n) => ({
-                value: n,
-                label: String(n),
-                selected: n === faceCount,
-            }));
-
-            const geometryOptions = [
-                {
-                    value: "standard",
-                    label: game.i18n.localize("EKD.Editor.GeometryStandard"),
-                    selected: d.geometry !== "board",
-                },
-                {
-                    value: "board",
-                    label: game.i18n.localize("EKD.Editor.GeometryBoard"),
-                    selected: d.geometry === "board",
-                },
-            ];
-
-            return {
-                editing: true,
-                dice: d,
-                faces,
-                facesOptions,
-                geometryOptions,
-                showGeometry: faceCount === 6,
-                slug: d.slug || "",
-                assetHint: d.slug
-                    ? `${diceBasePath(d.slug)}/textures/,  …/bump_maps/,  …/chat_2d/`
-                    : "",
-            };
+            faces.push({
+                number: i + 1,
+                index: i,
+                label: fm.label ?? "",
+                texture: fm.texture ?? "",
+                bump: fm.bump ?? "",
+                icon: fm.icon ?? "",
+                refFace: currentRef,
+                isRef,
+                refLabel: isRef ? String(currentRef + 1) : "",
+                allowedRefs,
+            });
         }
 
-        // ── List mode ──
+        // Face count options
+        const facesOptions = FACE_OPTIONS.map((n) => ({
+            value: n,
+            label: String(n),
+            selected: n === faceCount,
+        }));
+
+        // Geometry options – from scanned .glb files
+        const allGeos = ExotikDiceConfig._geometriesCache || [];
+        const customGeos = allGeos.filter((g) => g.faces === faceCount);
+        const showGeometry = customGeos.length > 0;
+        const geometryOptions = showGeometry
+            ? [
+                  {
+                      value: "standard",
+                      label: game.i18n.localize("EKD.Editor.GeometryStandard"),
+                      selected: d.geometry === "standard",
+                  },
+                  ...customGeos.map((g) => ({
+                      value: g.value,
+                      label: g.name,
+                      selected: d.geometry === g.value,
+                  })),
+              ]
+            : [];
+
+        // CSS 3D cube preview (d6 only)
+        let previewFaces = null;
+        let showCubePreview = false;
+        if (faceCount === 6) {
+            previewFaces = [];
+            for (let i = 0; i < 6; i++) {
+                const resolved = resolveFace(faceMap, i);
+                previewFaces.push(resolved?.texture || "");
+            }
+            showCubePreview = previewFaces.some((f) => f);
+        }
+
+        return {
+            editing: true,
+            dice: d,
+            faces,
+            facesOptions,
+            geometryOptions,
+            showGeometry,
+            showCubePreview,
+            previewFaces,
+            slug: d.slug || "",
+            assetHint: d.slug
+                ? `${diceBasePath(d.slug)}/textures/,  …/bump_maps/,  …/chat_2d/`
+                : "",
+        };
+    }
+
+    _getListData() {
         const definitions =
             game.settings.get(MODULE_ID, "diceDefinitions") || [];
-        const diceList = definitions.map((d) => ({
-            ...d,
-            geometryLabel:
-                d.geometry === "board"
-                    ? game.i18n.localize("EKD.Editor.GeometryBoard")
+        const allGeos = ExotikDiceConfig._geometriesCache || [];
+        const diceList = definitions.map((d) => {
+            const geo = allGeos.find((g) => g.value === d.geometry);
+            return {
+                ...d,
+                geometryLabel: geo
+                    ? geo.name
                     : game.i18n.localize("EKD.Editor.GeometryStandard"),
-        }));
+            };
+        });
         return { editing: false, diceList };
     }
 
-    /** @override */
+    /* ── Listeners ── */
+
     activateListeners(html) {
         super.activateListeners(html);
+        const el = html instanceof HTMLElement ? html : (html?.[0] ?? html);
+        if (!el) return;
 
-        // Foundry v13: html can be jQuery or raw HTMLElement
-        const el = html instanceof HTMLElement ? html : html?.[0] ?? html;
-        if (!el) {
-            console.error(`${MODULE_ID} | activateListeners: root element not found`);
-            return;
-        }
-
-        console.log(
-            `${MODULE_ID} | activateListeners – mode: ${this._editingDice ? "editor" : "list"}`,
-        );
-
-        // ── Delegated click handler (works for both modes) ──
+        // Delegated click handler
         el.addEventListener("click", (event) => {
             const t = event.target;
-
             if (t.closest(".ekd-add-dice")) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -204,29 +396,78 @@ export class ExotikDiceConfig extends FormApplication {
             if (t.closest(".ekd-back")) {
                 event.preventDefault();
                 event.stopPropagation();
-                this._editingDice = null;
-                setTimeout(() => this.render(true), 0);
+                if (this._settingsApp) {
+                    this.close();
+                } else {
+                    this._editingDice = null;
+                    setTimeout(() => this.render(true), 0);
+                }
             }
         });
 
-        // ── Editor-specific listeners ──
         if (this._editingDice) {
-            el.querySelector('[name="faces"]')
-              ?.addEventListener("change", (e) => this._onFacesChange(e));
+            // Snapshot for dirty tracking (after DOM is ready)
+            this._originalSnapshot = JSON.stringify(this._getSubmitData());
 
+            // Faces count change → resize faceMap + re-render
+            el.querySelector('[name="faces"]')?.addEventListener(
+                "change",
+                (e) => {
+                    this._captureFormData();
+                    this._editingDice.faces = parseInt(e.target.value);
+                    if (this._editingDice.faces !== 6)
+                        this._editingDice.geometry = "standard";
+                    const newLen = this._editingDice.faces;
+                    while (this._editingDice.faceMap.length < newLen) {
+                        this._editingDice.faceMap.push({
+                            refFace: null,
+                            label: "",
+                            texture: "",
+                            bump: "",
+                            icon: "",
+                        });
+                    }
+                    this._editingDice.faceMap.length = newLen;
+                    setTimeout(() => this.render(true), 0);
+                },
+            );
+
+            // Reference dropdown change → re-render
+            el.querySelectorAll(".ekd-ref-select").forEach((sel) => {
+                sel.addEventListener("change", () => {
+                    this._captureFormData();
+                    setTimeout(() => this.render(true), 0);
+                });
+            });
+
+            // Live image previews
             el.querySelectorAll("input.image").forEach((input) => {
                 input.addEventListener("change", (e) => this._onImageChange(e));
             });
+
+            // Dirty tracking on all inputs
+            el.addEventListener("input", () => this._checkDirty(el));
+            el.addEventListener("change", () => this._checkDirty(el));
         }
     }
 
-    /* ---------------------------------------- */
-    /*  Event Handlers – List mode               */
-    /* ---------------------------------------- */
+    /* ── Dirty tracking ── */
+
+    _checkDirty(el) {
+        try {
+            const current = JSON.stringify(this._getSubmitData());
+            const isDirty = current !== this._originalSnapshot;
+            const btn = el?.querySelector?.(".ekd-save-btn");
+            if (btn) btn.disabled = !isDirty;
+        } catch {
+            /* ignore */
+        }
+    }
+
+    /* ── List mode handlers ── */
 
     _onAddDice(event) {
         event.preventDefault();
-        console.log(`${MODULE_ID} | _onAddDice`);
         this._editingDice = {
             id: foundry.utils.randomID(),
             name: "",
@@ -235,6 +476,7 @@ export class ExotikDiceConfig extends FormApplication {
             faces: 6,
             geometry: "standard",
             faceMap: Array.from({ length: 6 }, () => ({
+                refFace: null,
                 label: "",
                 texture: "",
                 bump: "",
@@ -246,13 +488,10 @@ export class ExotikDiceConfig extends FormApplication {
 
     _onEditDice(event) {
         event.preventDefault();
-        const entry = event.target.closest("[data-id]");
-        const id = entry?.dataset?.id;
-        console.log(`${MODULE_ID} | _onEditDice id=${id}`);
+        const id = event.target.closest("[data-id]")?.dataset?.id;
         if (!id) return;
-        const definitions =
-            game.settings.get(MODULE_ID, "diceDefinitions") || [];
-        const dice = definitions.find((d) => d.id === id);
+        const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+        const dice = defs.find((d) => d.id === id);
         if (!dice) return;
         this._editingDice = foundry.utils.deepClone(dice);
         setTimeout(() => this.render(true), 0);
@@ -260,39 +499,23 @@ export class ExotikDiceConfig extends FormApplication {
 
     async _onDeleteDice(event) {
         event.preventDefault();
-        const entry = event.target.closest("[data-id]");
-        const id = entry?.dataset?.id;
-        console.log(`${MODULE_ID} | _onDeleteDice id=${id}`);
+        const id = event.target.closest("[data-id]")?.dataset?.id;
         if (!id) return;
-        const definitions =
-            game.settings.get(MODULE_ID, "diceDefinitions") || [];
-        const dice = definitions.find((d) => d.id === id);
+        const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+        const dice = defs.find((d) => d.id === id);
         if (!dice) return;
-
         const confirmed = await Dialog.confirm({
             title: game.i18n.localize("EKD.Config.Delete"),
             content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`,
         });
         if (!confirmed) return;
-
-        const updated = definitions.filter((d) => d.id !== id);
+        const updated = defs.filter((d) => d.id !== id);
         await game.settings.set(MODULE_ID, "diceDefinitions", updated);
         this.render(true);
-        this._promptReload();
+        promptReload();
     }
 
-    /* ---------------------------------------- */
-    /*  Event Handlers – Editor mode             */
-    /* ---------------------------------------- */
-
-    _onFacesChange(event) {
-        this._captureFormData();
-        this._editingDice.faces = parseInt(event.target.value);
-        if (this._editingDice.faces !== 6) {
-            this._editingDice.geometry = "standard";
-        }
-        setTimeout(() => this.render(true), 0);
-    }
+    /* ── Editor mode handlers ── */
 
     _onImageChange(event) {
         const input = event.currentTarget;
@@ -308,24 +531,38 @@ export class ExotikDiceConfig extends FormApplication {
         }
     }
 
-    /* ---------------------------------------- */
-    /*  Persistence                              */
-    /* ---------------------------------------- */
+    /* ── Persistence ── */
 
-    /** @override */
     async _updateObject(_event, formData) {
-        if (!this._editingDice) return; // list mode, nothing to save
+        if (!this._editingDice) return;
 
         const expanded = foundry.utils.expandObject(formData);
+        const currentDefs =
+            game.settings.get(MODULE_ID, "diceDefinitions") || [];
 
-        // --- Validation ---
-        if (!expanded.name?.trim()) {
+        // ── Name validation ──
+        const nameTrimmed = (expanded.name ?? "").trim();
+        if (!nameTrimmed) {
             ui.notifications.error(
                 game.i18n.localize("EKD.Validation.NameRequired"),
             );
             throw new Error("Validation failed");
         }
+        const nameConflict = currentDefs.find(
+            (d) =>
+                d.name.trim().toLowerCase() === nameTrimmed.toLowerCase() &&
+                d.id !== this._editingDice.id,
+        );
+        if (nameConflict) {
+            ui.notifications.error(
+                game.i18n.format("EKD.Validation.NameConflict", {
+                    name: nameConflict.name,
+                }),
+            );
+            throw new Error("Validation failed");
+        }
 
+        // ── Denomination validation ──
         const denom = (expanded.denomination ?? "").trim().toLowerCase();
         if (!denom) {
             ui.notifications.error(
@@ -339,12 +576,10 @@ export class ExotikDiceConfig extends FormApplication {
             );
             throw new Error("Validation failed");
         }
-
-        const currentDefs =
-            game.settings.get(MODULE_ID, "diceDefinitions") || [];
-        const ownDenoms = new Set(currentDefs.map((d) => d.denomination));
-
-        if (RESERVED_DENOMS.has(denom) && !ownDenoms.has(denom)) {
+        // Check against CONFIG.Dice.terms (Foundry core + other modules)
+        const externalTerms = new Set(Object.keys(CONFIG.Dice.terms || {}));
+        for (const def of currentDefs) externalTerms.delete(def.denomination);
+        if (externalTerms.has(denom)) {
             ui.notifications.error(
                 game.i18n.format("EKD.Validation.DenominationReserved", {
                     denom,
@@ -352,103 +587,132 @@ export class ExotikDiceConfig extends FormApplication {
             );
             throw new Error("Validation failed");
         }
-
-        const conflict = currentDefs.find(
+        // Check against our own dice
+        const denomConflict = currentDefs.find(
             (d) => d.denomination === denom && d.id !== this._editingDice.id,
         );
-        if (conflict) {
+        if (denomConflict) {
             ui.notifications.error(
                 game.i18n.format("EKD.Validation.DenominationConflict", {
                     denom,
-                    name: conflict.name,
+                    name: denomConflict.name,
                 }),
             );
             throw new Error("Validation failed");
         }
 
-        // --- Build dice definition ---
+        // ── Build faceMap ──
         const faceCount = parseInt(expanded.faces) || 6;
         const faceMap = [];
         const rawMap = expanded.faceMap || {};
         for (let i = 0; i < faceCount; i++) {
             const f = rawMap[i] || {};
+            const refStr = String(f.refFace ?? "").trim();
+            const refFace = refStr !== "" ? parseInt(refStr) : null;
             faceMap.push({
-                label: (f.label ?? "").trim(),
-                texture: (f.texture ?? "").trim(),
-                bump: (f.bump ?? "").trim(),
-                icon: (f.icon ?? "").trim(),
+                refFace,
+                label: refFace != null ? "" : (f.label ?? "").trim(),
+                texture: refFace != null ? "" : (f.texture ?? "").trim(),
+                bump: refFace != null ? "" : (f.bump ?? "").trim(),
+                icon: refFace != null ? "" : (f.icon ?? "").trim(),
             });
+        }
+
+        // Validate no loops
+        for (let i = 0; i < faceMap.length; i++) {
+            if (faceMap[i].refFace != null && !resolveFace(faceMap, i)) {
+                ui.notifications.error(
+                    game.i18n.localize("EKD.Validation.FaceRefLoop"),
+                );
+                throw new Error("Validation failed");
+            }
+        }
+
+        // ── Geometry ──
+        const allGeos = ExotikDiceConfig._geometriesCache || [];
+        const customGeos = allGeos.filter((g) => g.faces === faceCount);
+        let geometry = "standard";
+        if (customGeos.length > 0) {
+            geometry = expanded.geometry || "standard";
         }
 
         const diceDef = {
             id: this._editingDice.id,
-            name: expanded.name.trim(),
-            slug: nameToSlug(expanded.name),
+            name: nameTrimmed,
+            slug: this._editingDice.slug || nameToSlug(nameTrimmed),
             denomination: denom,
             faces: faceCount,
-            geometry:
-                faceCount === 6 ? expanded.geometry || "standard" : "standard",
+            geometry,
             faceMap,
         };
 
-        // --- Create asset folders on the server ---
-        if (diceDef.slug) {
-            await ensureDiceFolders(diceDef.slug);
+        // ── Dirty check ──
+        const existingIdx = currentDefs.findIndex((d) => d.id === diceDef.id);
+        if (
+            existingIdx >= 0 &&
+            JSON.stringify(currentDefs[existingIdx]) === JSON.stringify(diceDef)
+        ) {
+            ui.notifications.info(
+                game.i18n.localize("EKD.Validation.NoChanges"),
+            );
+            if (this._settingsApp) this.close();
+            else {
+                this._editingDice = null;
+                setTimeout(() => this.render(true), 0);
+            }
+            return;
         }
 
-        // --- Save ---
-        const idx = currentDefs.findIndex((d) => d.id === diceDef.id);
-        if (idx >= 0) {
-            currentDefs[idx] = diceDef;
-        } else {
-            currentDefs.push(diceDef);
-        }
+        // ── Create folders ──
+        if (diceDef.slug) await ensureDiceFolders(diceDef.slug);
 
+        // ── Save ──
+        if (existingIdx >= 0) currentDefs[existingIdx] = diceDef;
+        else currentDefs.push(diceDef);
         await game.settings.set(MODULE_ID, "diceDefinitions", currentDefs);
         ui.notifications.info(
             game.i18n.format("EKD.Config.DiceSaved", { name: diceDef.name }),
         );
 
-        // Go back to list
-        this._editingDice = null;
-        this.render(true);
-        this._promptReload();
+        // ── Post-save ──
+        if (this._settingsApp) {
+            this._settingsApp.render(true);
+            this.close();
+        } else {
+            this._editingDice = null;
+            this.render(true);
+        }
+        promptReload();
     }
 
-    /* ---------------------------------------- */
-    /*  Helpers                                  */
-    /* ---------------------------------------- */
+    /* ── Helpers ── */
 
     _captureFormData() {
         const formData = this._getSubmitData();
         const exp = foundry.utils.expandObject(formData);
         this._editingDice.name = exp.name ?? this._editingDice.name;
-        this._editingDice.slug = nameToSlug(this._editingDice.name);
+        if (!this._editingDice.slug) {
+            this._editingDice.slug = nameToSlug(this._editingDice.name);
+        }
         this._editingDice.denomination =
             exp.denomination ?? this._editingDice.denomination;
         this._editingDice.geometry = exp.geometry ?? this._editingDice.geometry;
         if (exp.faceMap) {
-            this._editingDice.faceMap = Object.values(exp.faceMap);
+            const newMap = [];
+            const rawMap = exp.faceMap;
+            for (let i = 0; i < this._editingDice.faces; i++) {
+                const f = rawMap[i] || {};
+                const refStr = String(f.refFace ?? "").trim();
+                const refFace = refStr !== "" ? parseInt(refStr) : null;
+                newMap.push({
+                    refFace,
+                    label: refFace != null ? "" : (f.label ?? "").trim(),
+                    texture: refFace != null ? "" : (f.texture ?? "").trim(),
+                    bump: refFace != null ? "" : (f.bump ?? "").trim(),
+                    icon: refFace != null ? "" : (f.icon ?? "").trim(),
+                });
+            }
+            this._editingDice.faceMap = newMap;
         }
     }
-
-    _promptReload() {
-        new Dialog({
-            title: game.i18n.localize("EKD.Config.ReloadRequired"),
-            content: `<p>${game.i18n.localize("EKD.Config.ReloadRequiredMsg")}</p>`,
-            buttons: {
-                reload: {
-                    icon: '<i class="fas fa-sync"></i>',
-                    label: game.i18n.localize("EKD.Config.ReloadNow"),
-                    callback: () => window.location.reload(),
-                },
-                later: {
-                    icon: '<i class="fas fa-clock"></i>',
-                    label: game.i18n.localize("EKD.Config.ReloadLater"),
-                },
-            },
-            default: "reload",
-        }).render(true);
-    }
 }
-

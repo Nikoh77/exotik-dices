@@ -23,7 +23,8 @@
             "ReloadRequired": "Reload Required",
             "ReloadRequiredMsg": "Dice configuration changed. A world reload is required for changes to take effect.",
             "ReloadNow": "Reload Now",
-            "ReloadLater": "Later"
+            "ReloadLater": "Later",
+            "Instructions": "Instructions"
         },
 
         "Editor": {
@@ -47,15 +48,21 @@
             "FaceIcon": "Chat Icon",
             "AssetFolder": "Asset Folder",
             "AssetFolderHint": "Folders are created automatically when saving. Place your images in the appropriate subfolder.",
-            "Save": "Save"
+            "Save": "Save",
+            "FaceRef": "Reference",
+            "FaceRefNone": "None (own data)",
+            "FaceRefInherited": "Inherited from Face"
         },
 
         "Validation": {
             "NameRequired": "A name is required.",
+            "NameConflict": "A dice named \"{name}\" already exists.",
+            "NoChanges": "No changes detected.",
             "DenominationRequired": "A denomination character is required.",
             "DenominationLength": "Denomination must be exactly one character.",
-            "DenominationReserved": "The denomination \"{denom}\" is reserved by Foundry VTT.",
-            "DenominationConflict": "The denomination \"{denom}\" is already used by \"{name}\"."
+            "DenominationReserved": "The denomination \"{denom}\" is reserved by Foundry VTT or another module.",
+            "DenominationConflict": "The denomination \"{denom}\" is already used by \"{name}\".",
+            "FaceRefLoop": "Face reference loop detected. Please fix circular references."
         }
     }
 }

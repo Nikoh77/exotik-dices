@@ -23,7 +23,8 @@
             "ReloadRequired": "Ricaricamento Necessario",
             "ReloadRequiredMsg": "La configurazione dei dadi è cambiata. È necessario ricaricare il mondo per applicare le modifiche.",
             "ReloadNow": "Ricarica Ora",
-            "ReloadLater": "Dopo"
+            "ReloadLater": "Dopo",
+            "Instructions": "Istruzioni"
         },
 
         "Editor": {
@@ -47,15 +48,21 @@
             "FaceIcon": "Icona Chat",
             "AssetFolder": "Cartella Asset",
             "AssetFolderHint": "Le cartelle vengono create automaticamente al salvataggio. Posiziona le immagini nella sottocartella appropriata.",
-            "Save": "Salva"
+            "Save": "Salva",
+            "FaceRef": "Riferimento",
+            "FaceRefNone": "Nessuno (dati propri)",
+            "FaceRefInherited": "Ereditato dalla Faccia"
         },
 
         "Validation": {
             "NameRequired": "Il nome è obbligatorio.",
+            "NameConflict": "Esiste già un dado chiamato \"{name}\".",
+            "NoChanges": "Nessuna modifica rilevata.",
             "DenominationRequired": "Il carattere di denominazione è obbligatorio.",
             "DenominationLength": "La denominazione deve essere esattamente un carattere.",
-            "DenominationReserved": "La denominazione \"{denom}\" è riservata da Foundry VTT.",
-            "DenominationConflict": "La denominazione \"{denom}\" è già usata da \"{name}\"."
+            "DenominationReserved": "La denominazione \"{denom}\" è riservata da Foundry VTT o da un altro modulo.",
+            "DenominationConflict": "La denominazione \"{denom}\" è già usata da \"{name}\".",
+            "FaceRefLoop": "Rilevato loop nei riferimenti delle facce. Correggi i riferimenti circolari."
         }
     }
 }
