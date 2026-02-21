@@ -1,0 +1,34 @@
+<form autocomplete="off">
+
+    <p class="notes">{{localize "EKD.Config.Hint"}}</p>
+
+    {{#if dice.length}}
+    <ol class="ekd-dice-list">
+        {{#each dice}}
+        <li class="ekd-dice-entry flexrow" data-id="{{this.id}}">
+            <span class="ekd-dice-name flex2">{{this.name}}</span>
+            <span class="ekd-dice-denom flex0">d{{this.denomination}}</span>
+            <span class="ekd-dice-faces flex0">{{this.faces}} {{localize "EKD.Config.FacesLabel"}}</span>
+            <span class="ekd-dice-geometry flex1">{{this.geometryLabel}}</span>
+            <div class="ekd-dice-controls flex0">
+                <a class="ekd-edit" data-id="{{this.id}}" title="{{localize 'EKD.Config.Edit'}}">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <a class="ekd-delete" data-id="{{this.id}}" title="{{localize 'EKD.Config.Delete'}}">
+                    <i class="fas fa-trash"></i>
+                </a>
+            </div>
+        </li>
+        {{/each}}
+    </ol>
+    {{else}}
+    <p class="ekd-no-dice">{{localize "EKD.Config.NoDice"}}</p>
+    {{/if}}
+
+    <div class="ekd-config-buttons">
+        <button type="button" class="ekd-add-die">
+            <i class="fas fa-plus"></i> {{localize "EKD.Config.AddDie"}}
+        </button>
+    </div>
+
+</form>

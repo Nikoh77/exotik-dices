@@ -1,9 +1,57 @@
 {
     "EKD": {
         "Dice": "Exotik Dices",
-        "CombatDie": "Dado da Combattimento",
-        "Skull": "Teschio",
-        "WhiteShield": "Scudo Bianco",
-        "BlackShield": "Scudo Nero"
+        "DSNRequired": "Il modulo Dice So Nice! è necessario per il funzionamento di Exotik Dices. Installalo e attivalo.",
+
+        "Settings": {
+            "DiceDefinitions": "Definizioni Dadi",
+            "ConfigureDice": "Configura Exotik Dices",
+            "ConfigureLabel": "Configura",
+            "ConfigureHint": "Crea e personalizza i tuoi dadi esotici."
+        },
+
+        "Config": {
+            "Title": "Exotik Dices – Configurazione",
+            "Hint": "Gestisci i tuoi dadi personalizzati. Ogni dado viene registrato come denominazione tirabile (es. /r 1dh).",
+            "AddDie": "Aggiungi Dado",
+            "NoDice": "Nessun dado definito. Clicca \"Aggiungi Dado\" per creare il tuo primo dado esotico.",
+            "FacesLabel": "facce",
+            "Edit": "Modifica",
+            "Delete": "Elimina",
+            "DeleteConfirm": "Sei sicuro di voler eliminare \"{name}\"?",
+            "DieSaved": "Dado \"{name}\" salvato.",
+            "ReloadRequired": "Ricaricamento Necessario",
+            "ReloadRequiredMsg": "La configurazione dei dadi è cambiata. È necessario ricaricare il mondo per applicare le modifiche.",
+            "ReloadNow": "Ricarica Ora",
+            "ReloadLater": "Dopo"
+        },
+
+        "Editor": {
+            "TitleNew": "Nuovo Dado",
+            "TitleEdit": "Modifica Dado: {name}",
+            "Name": "Nome",
+            "NameHint": "Nome visualizzato per questo tipo di dado.",
+            "Denomination": "Denominazione",
+            "DenominationHint": "Singolo carattere usato nelle formule di tiro (es. 'h' → /r 1dh). Deve essere unico.",
+            "Faces": "Facce",
+            "Geometry": "Geometria",
+            "GeometryHint": "Stile della geometria 3D. 'Board Game Classic' usa angoli arrotondati (solo d6).",
+            "GeometryStandard": "Standard (DSN)",
+            "GeometryBoard": "Board Game Classic (Arrotondato)",
+            "FaceConfig": "Configurazione Facce",
+            "Face": "Faccia",
+            "FaceLabel": "Etichetta",
+            "FaceTexture": "Texture (3D)",
+            "FaceBump": "Bump Map (3D)",
+            "FaceIcon": "Icona Chat"
+        },
+
+        "Validation": {
+            "NameRequired": "Il nome è obbligatorio.",
+            "DenominationRequired": "Il carattere di denominazione è obbligatorio.",
+            "DenominationLength": "La denominazione deve essere esattamente un carattere.",
+            "DenominationReserved": "La denominazione \"{denom}\" è riservata da Foundry VTT.",
+            "DenominationConflict": "La denominazione \"{denom}\" è già usata da \"{name}\"."
+        }
     }
 }

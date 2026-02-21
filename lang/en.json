@@ -1,9 +1,57 @@
 {
     "EKD": {
         "Dice": "Exotik Dices",
-        "CombatDie": "Combat Die",
-        "Skull": "Skull",
-        "WhiteShield": "White Shield",
-        "BlackShield": "Black Shield"
+        "DSNRequired": "Dice So Nice! module is required for Exotik Dices to work. Please install and enable it.",
+
+        "Settings": {
+            "DiceDefinitions": "Dice Definitions",
+            "ConfigureDice": "Configure Exotik Dices",
+            "ConfigureLabel": "Configure",
+            "ConfigureHint": "Create and customize your exotic dice."
+        },
+
+        "Config": {
+            "Title": "Exotik Dices – Configuration",
+            "Hint": "Manage your custom dice. Each die is registered as a rollable denomination (e.g. /r 1dh).",
+            "AddDie": "Add Die",
+            "NoDice": "No dice defined yet. Click \"Add Die\" to create your first exotic die.",
+            "FacesLabel": "faces",
+            "Edit": "Edit",
+            "Delete": "Delete",
+            "DeleteConfirm": "Are you sure you want to delete \"{name}\"?",
+            "DieSaved": "Die \"{name}\" saved.",
+            "ReloadRequired": "Reload Required",
+            "ReloadRequiredMsg": "Dice configuration changed. A world reload is required for changes to take effect.",
+            "ReloadNow": "Reload Now",
+            "ReloadLater": "Later"
+        },
+
+        "Editor": {
+            "TitleNew": "New Die",
+            "TitleEdit": "Edit Die: {name}",
+            "Name": "Name",
+            "NameHint": "Display name for this die type.",
+            "Denomination": "Denomination",
+            "DenominationHint": "Single character used in roll formulas (e.g. 'h' → /r 1dh). Must be unique.",
+            "Faces": "Faces",
+            "Geometry": "Geometry",
+            "GeometryHint": "3D geometry style. 'Board Game Classic' uses rounded corners (d6 only).",
+            "GeometryStandard": "Standard (DSN)",
+            "GeometryBoard": "Board Game Classic (Rounded)",
+            "FaceConfig": "Face Configuration",
+            "Face": "Face",
+            "FaceLabel": "Label",
+            "FaceTexture": "Texture (3D)",
+            "FaceBump": "Bump Map (3D)",
+            "FaceIcon": "Chat Icon"
+        },
+
+        "Validation": {
+            "NameRequired": "A name is required.",
+            "DenominationRequired": "A denomination character is required.",
+            "DenominationLength": "Denomination must be exactly one character.",
+            "DenominationReserved": "The denomination \"{denom}\" is reserved by Foundry VTT.",
+            "DenominationConflict": "The denomination \"{denom}\" is already used by \"{name}\"."
+        }
     }
 }

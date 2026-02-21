@@ -1,10 +1,12 @@
 /**
  * Exotik Dices Module for Foundry VTT v13+
- * Registers a custom ExotikDice (denomination "h") and integrates with
- * Dice So Nice for 3D rendering.
  *
- * Face mapping:  1-3 = Skull,  4-5 = White Shield,  6 = Black Shield
+ * Dynamically registers user-defined custom dice with Dice So Nice
+ * integration.  Dice definitions are stored in module settings and
+ * can be managed through Configure Settings → Exotik Dices.
  */
+
+import { ExotikDiceConfig } from "./ExotikDiceConfig.js";
 
 /* ---------------------------------------- */
 /*  Constants                                */
@@ -13,140 +15,246 @@
 const MODULE_ID = "exotik-dices";
 const FACE_PATH = `modules/${MODULE_ID}/assets/faces`;
 
-/** Symbol definitions keyed by face range */
-const SYMBOLS = Object.freeze({
-    skull: {
-        min: 1,
-        max: 3,
-        svg: "skull.svg",
-        png: "skull.png",
-        bump: "skull_bump.png",
-        i18n: "EKD.Skull",
+/** Default die shipped with the module (Combat Die) */
+const DEFAULT_DICE = [
+    {
+        id: "ekd-default-combat",
+        name: "Combat Die",
+        denomination: "h",
+        faces: 6,
+        geometry: "board",
+        faceMap: [
+            {
+                label: "Skull",
+                texture: `${FACE_PATH}/skull.png`,
+                bump: `${FACE_PATH}/skull_bump.png`,
+                icon: `${FACE_PATH}/skull.svg`,
+            },
+            {
+                label: "Skull",
+                texture: `${FACE_PATH}/skull.png`,
+                bump: `${FACE_PATH}/skull_bump.png`,
+                icon: `${FACE_PATH}/skull.svg`,
+            },
+            {
+                label: "Skull",
+                texture: `${FACE_PATH}/skull.png`,
+                bump: `${FACE_PATH}/skull_bump.png`,
+                icon: `${FACE_PATH}/skull.svg`,
+            },
+            {
+                label: "White Shield",
+                texture: `${FACE_PATH}/shield_white.png`,
+                bump: `${FACE_PATH}/shield_white_bump.png`,
+                icon: `${FACE_PATH}/shield_white.svg`,
+            },
+            {
+                label: "White Shield",
+                texture: `${FACE_PATH}/shield_white.png`,
+                bump: `${FACE_PATH}/shield_white_bump.png`,
+                icon: `${FACE_PATH}/shield_white.svg`,
+            },
+            {
+                label: "Black Shield",
+                texture: `${FACE_PATH}/shield_black.png`,
+                bump: `${FACE_PATH}/shield_black_bump.png`,
+                icon: `${FACE_PATH}/shield_black.svg`,
+            },
+        ],
     },
-    shield_white: {
-        min: 4,
-        max: 5,
-        svg: "shield_white.svg",
-        png: "shield_white.png",
-        bump: "shield_white_bump.png",
-        i18n: "EKD.WhiteShield",
-    },
-    shield_black: {
-        min: 6,
-        max: 6,
-        svg: "shield_black.svg",
-        png: "shield_black.png",
-        bump: "shield_black_bump.png",
-        i18n: "EKD.BlackShield",
-    },
-});
+];
 
 /* ---------------------------------------- */
-/*  ExotikDie                                */
+/*  Runtime lookup maps                      */
 /* ---------------------------------------- */
 
-class ExotikDie extends foundry.dice.terms.Die {
-    constructor(termData = {}) {
-        super({ ...termData, faces: 6 });
-    }
+/** @type {Map<string, object>}  denomination → die definition */
+const _dieDefinitions = new Map();
 
-    /** @override */
-    static DENOMINATION = "h";
+/** @type {Map<string, typeof Die>}  denomination → Die subclass */
+const _dieClasses = new Map();
 
-    /**
-     * Map a face value (1-6) to its Exotik symbol key.
-     * @param {number} value
-     * @returns {string} "skull" | "shield_white" | "shield_black"
-     */
-    static getSymbol(value) {
-        for (const [key, def] of Object.entries(SYMBOLS)) {
-            if (value >= def.min && value <= def.max) return key;
+/* ---------------------------------------- */
+/*  Dynamic Die Class Factory                */
+/* ---------------------------------------- */
+
+/**
+ * Create a Die subclass for a given definition.
+ * @param {object} def  Die definition from settings
+ * @returns {typeof Die}
+ */
+function createDieClass(def) {
+    const { denomination, faces: faceCount, faceMap } = def;
+
+    const DynamicDie = class extends foundry.dice.terms.Die {
+        constructor(termData = {}) {
+            super({ ...termData, faces: faceCount });
         }
-        return "skull"; // fallback
-    }
 
-    /**
-     * Count symbol occurrences from an array of DiceTermResults.
-     * @param {DiceTermResult[]} results
-     * @returns {{ skull: number, shield_white: number, shield_black: number }}
-     */
-    static countSymbols(results) {
-        const counts = { skull: 0, shield_white: 0, shield_black: 0 };
-        for (const r of results) {
-            if (!r.active) continue;
-            counts[ExotikDie.getSymbol(r.result)]++;
+        static DENOMINATION = denomination;
+
+        /** @override */
+        getResultLabel(result) {
+            const faceDef = faceMap[result.result - 1];
+            if (!faceDef?.icon) return String(result.result);
+            const title = faceDef.label || String(result.result);
+            return `<img src="${faceDef.icon}" title="${title}"/>`;
         }
-        return counts;
-    }
 
-    /** @override */
-    getResultLabel(result) {
-        const key = ExotikDie.getSymbol(result.result);
-        const def = SYMBOLS[key];
-        const title = game.i18n?.localize(def.i18n) ?? key;
-        return `<img src="${FACE_PATH}/${def.svg}" title="${title}"/>`;
-    }
+        /** @override */
+        getResultCSS(result) {
+            return [
+                "ekd-die",
+                `d${faceCount}`,
+                result.rerolled ? "rerolled" : null,
+                result.exploded ? "exploded" : null,
+                result.discarded ? "discarded" : null,
+            ];
+        }
+    };
 
-    /** @override */
-    getResultCSS(result) {
-        return [
-            "ekd-die",
-            "d6",
-            result.rerolled ? "rerolled" : null,
-            result.exploded ? "exploded" : null,
-            result.discarded ? "discarded" : null,
-        ];
-    }
+    Object.defineProperty(DynamicDie, "name", {
+        value: `ExotikDie_${denomination}`,
+    });
+
+    return DynamicDie;
 }
 
 /* ---------------------------------------- */
-/*  Registration                             */
+/*  DSN helpers                              */
+/* ---------------------------------------- */
+
+/** Map face count → DSN geometry key */
+function getDSNGeometryType(faces) {
+    const map = { 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12", 20: "d20" };
+    return map[faces] || "d6";
+}
+
+/* ---------------------------------------- */
+/*  Settings registration                    */
+/* ---------------------------------------- */
+
+function registerSettings() {
+    game.settings.register(MODULE_ID, "diceDefinitions", {
+        name: "EKD.Settings.DiceDefinitions",
+        scope: "world",
+        config: false,
+        type: Array,
+        default: DEFAULT_DICE,
+    });
+
+    game.settings.registerMenu(MODULE_ID, "diceConfig", {
+        name: "EKD.Settings.ConfigureDice",
+        label: "EKD.Settings.ConfigureLabel",
+        hint: "EKD.Settings.ConfigureHint",
+        icon: "fas fa-dice",
+        type: ExotikDiceConfig,
+        restricted: true,
+    });
+}
+
+/* ---------------------------------------- */
+/*  Chat-message summary builder             */
+/* ---------------------------------------- */
+
+/**
+ * Build an HTML summary string for all Exotik dice results in a set of rolls.
+ * Groups identical face icons and shows counts.
+ * @param {Roll[]} rolls
+ * @returns {string|null}
+ */
+function buildChatSummary(rolls) {
+    /** @type {{ denomination: string, result: number, active: boolean }[]} */
+    const allResults = [];
+
+    for (const roll of rolls) {
+        for (const term of roll.terms || []) {
+            const denom = term.constructor?.DENOMINATION;
+            if (denom && _dieDefinitions.has(denom)) {
+                for (const r of term.results) {
+                    allResults.push({ ...r, denomination: denom });
+                }
+            }
+        }
+    }
+    if (!allResults.length) return null;
+
+    // Group by icon path (or label if no icon)
+    const groups = new Map();
+    for (const r of allResults) {
+        if (!r.active) continue;
+        const def = _dieDefinitions.get(r.denomination);
+        const faceDef = def?.faceMap?.[r.result - 1];
+        if (!faceDef) continue;
+
+        const key = faceDef.icon || faceDef.label || String(r.result);
+        if (!groups.has(key)) {
+            groups.set(key, {
+                label: faceDef.label || String(r.result),
+                icon: faceDef.icon,
+                count: 0,
+            });
+        }
+        groups.get(key).count++;
+    }
+
+    const parts = [];
+    for (const [, g] of groups) {
+        if (g.count <= 0) continue;
+        const iconHtml = g.icon
+            ? `<img src="${g.icon}" class="ekd-summary-icon" title="${g.label}"/>`
+            : `<span>${g.label}</span>`;
+        parts.push(
+            `<span class="ekd-summary-item">${iconHtml} ×${g.count}</span>`,
+        );
+    }
+
+    return parts.length
+        ? `<div class="ekd-dice-summary">${parts.join("")}</div>`
+        : null;
+}
+
+/* ---------------------------------------- */
+/*  Hooks                                    */
 /* ---------------------------------------- */
 
 Hooks.once("init", () => {
-    CONFIG.Dice.terms["h"] = ExotikDie;
-    console.log(`${MODULE_ID} | Registered ExotikDie (dh)`);
+    registerSettings();
+
+    // Load dice definitions and register Die subclasses
+    const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+
+    for (const def of definitions) {
+        _dieDefinitions.set(def.denomination, def);
+        const DieClass = createDieClass(def);
+        _dieClasses.set(def.denomination, DieClass);
+        CONFIG.Dice.terms[def.denomination] = DieClass;
+        console.log(
+            `${MODULE_ID} | Registered die: d${def.denomination} – "${def.name}" (${def.faces} faces)`,
+        );
+    }
+});
+
+Hooks.once("ready", () => {
+    // Warn if Dice So Nice is missing
+    if (!game.modules.get("dice-so-nice")?.active) {
+        ui.notifications.warn(game.i18n.localize("EKD.DSNRequired"));
+    }
 });
 
 /* ---------------------------------------- */
 /*  Chat Message Rendering                   */
 /* ---------------------------------------- */
 
-/**
- * Replace the numeric total with a symbol summary for any roll that
- * contains Exotik Dices.  Handles multiple rolls per message.
- * Uses renderChatMessageHTML (v13+) which passes a native HTMLElement.
- */
 Hooks.on("renderChatMessageHTML", (message, html) => {
     if (!message.rolls?.length) return;
 
-    // Gather Exotik Dices results across ALL rolls in the message
-    const allResults = [];
-    for (const roll of message.rolls) {
-        const hqTerms = roll.terms?.filter((t) => t instanceof ExotikDie);
-        if (hqTerms?.length)
-            allResults.push(...hqTerms.flatMap((t) => t.results));
-    }
-    if (!allResults.length) return;
-
-    const counts = ExotikDie.countSymbols(allResults);
-
-    // Build the summary HTML with localized labels
-    const parts = [];
-    for (const [key, def] of Object.entries(SYMBOLS)) {
-        if (counts[key] > 0) {
-            const title = game.i18n.localize(def.i18n);
-            parts.push(
-                `<span class="ekd-summary-item">` +
-                    `<img src="${FACE_PATH}/${def.svg}" class="ekd-summary-icon" title="${title}"/> ×${counts[key]}` +
-                    `</span>`,
-            );
-        }
-    }
+    const summaryHtml = buildChatSummary(message.rolls);
+    if (!summaryHtml) return;
 
     const totalEl = html.querySelector(".dice-total");
     if (totalEl) {
-        totalEl.innerHTML = `<div class="ekd-dice-summary">${parts.join("")}</div>`;
+        totalEl.innerHTML = summaryHtml;
         totalEl.classList.add("ekd-total");
     }
 });
@@ -159,36 +267,35 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
     dice3d.addSystem({ id: "ekd", name: "Exotik Dices" }, "preferred");
-    console.log(`${MODULE_ID} | System "ekd" added`);
 
-    // Build label and bumpMap arrays from SYMBOLS definition (ordered by face)
-    // PNGs have transparent backgrounds so DSN's die colour shows through
-    const labels = [];
-    const bumpMaps = [];
-    for (let face = 1; face <= 6; face++) {
-        const key = ExotikDie.getSymbol(face);
-        const def = SYMBOLS[key];
-        labels.push(`${FACE_PATH}/${def.png}`);
-        bumpMaps.push(`${FACE_PATH}/${def.bump}`);
+    const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+
+    for (const def of definitions) {
+        const labels = def.faceMap.map((f) => f.texture || "");
+        const bumpMaps = def.faceMap.map((f) => f.bump || "");
+        const dsnGeo = getDSNGeometryType(def.faces);
+
+        dice3d.addDicePreset(
+            {
+                type: `d${def.denomination}`,
+                labels,
+                bumpMaps,
+                system: "ekd",
+            },
+            dsnGeo,
+        );
+
+        console.log(
+            `${MODULE_ID} | DSN preset registered: d${def.denomination} as ${dsnGeo}`,
+        );
     }
 
-    console.log(`${MODULE_ID} | Labels:`, labels);
-
-    // Register preset WITHOUT modelFile — DSN will create the standard d6
-    // geometry with its full material pipeline (user colors, labels, bumps).
-    dice3d.addDicePreset(
-        {
-            type: "dh",
-            labels,
-            bumpMaps,
-            system: "ekd",
-        },
-        "d6",
+    // ── Board-game-classic geometry swap (rounded d6 GLB) ──
+    const boardDice = definitions.filter(
+        (d) => d.geometry === "board" && d.faces === 6,
     );
-    console.log(`${MODULE_ID} | Dice So Nice preset registered`);
+    if (!boardDice.length) return;
 
-    // Load casino-style geometry from GLB (no textures, just shape + UVs)
-    // and monkey-patch DiceFactory.create() to swap geometry for "dh" dice.
     const glbPath = `modules/${MODULE_ID}/assets/rounded_d6.glb`;
     dice3d.DiceFactory.loaderGLTF.load(glbPath, (gltf) => {
         let casinoGeometry = null;
@@ -197,21 +304,22 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
                 casinoGeometry = child.geometry;
             }
         });
+
         if (!casinoGeometry) {
             console.error(`${MODULE_ID} | Failed to extract geometry from GLB`);
             return;
         }
+
         console.log(
-            `${MODULE_ID} | Casino geometry loaded:`,
-            casinoGeometry.attributes.position.count,
-            "vertices",
+            `${MODULE_ID} | Casino geometry loaded: ${casinoGeometry.attributes.position.count} vertices`,
         );
 
-        // Monkey-patch create() to swap geometry for "dh" dice
+        const boardDenoms = new Set(boardDice.map((d) => `d${d.denomination}`));
         const origCreate = dice3d.DiceFactory.create.bind(dice3d.DiceFactory);
+
         dice3d.DiceFactory.create = async function (t, i, r) {
             const mesh = await origCreate(t, i, r);
-            if (i === "dh" && mesh) {
+            if (boardDenoms.has(i) && mesh) {
                 const baseScale = t.type === "board" ? this.baseScale : 60;
                 const s = baseScale / 100;
                 const geo = casinoGeometry.clone();
@@ -219,7 +327,6 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
                 if (mesh.isMesh) {
                     mesh.geometry = geo;
                 } else {
-                    // Group — swap geometry on first child mesh
                     mesh.traverse((child) => {
                         if (child.isMesh) child.geometry = geo;
                     });
@@ -227,6 +334,9 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
             }
             return mesh;
         };
-        console.log(`${MODULE_ID} | Geometry swap hook installed`);
+
+        console.log(
+            `${MODULE_ID} | Geometry swap hook installed for: ${[...boardDenoms].join(", ")}`,
+        );
     });
 });

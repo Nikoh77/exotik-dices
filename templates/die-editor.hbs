@@ -1,0 +1,109 @@
+<form autocomplete="off">
+
+    <!-- ── Basic info ── -->
+    <div class="form-group">
+        <label>{{localize "EKD.Editor.Name"}}</label>
+        <div class="form-fields">
+            <input type="text" name="name" value="{{die.name}}" placeholder="My Custom Die" />
+        </div>
+        <p class="notes">{{localize "EKD.Editor.NameHint"}}</p>
+    </div>
+
+    <div class="form-group">
+        <label>{{localize "EKD.Editor.Denomination"}}</label>
+        <div class="form-fields">
+            <input type="text" name="denomination" value="{{die.denomination}}"
+                   maxlength="1" style="width:60px;text-align:center;" />
+        </div>
+        <p class="notes">{{localize "EKD.Editor.DenominationHint"}}</p>
+    </div>
+
+    <div class="form-group">
+        <label>{{localize "EKD.Editor.Faces"}}</label>
+        <div class="form-fields">
+            <select name="faces">
+                {{#each facesOptions}}
+                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                {{/each}}
+            </select>
+        </div>
+    </div>
+
+    {{#if showGeometry}}
+    <div class="form-group">
+        <label>{{localize "EKD.Editor.Geometry"}}</label>
+        <div class="form-fields">
+            <select name="geometry">
+                {{#each geometryOptions}}
+                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                {{/each}}
+            </select>
+        </div>
+        <p class="notes">{{localize "EKD.Editor.GeometryHint"}}</p>
+    </div>
+    {{else}}
+    <input type="hidden" name="geometry" value="standard" />
+    {{/if}}
+
+    <!-- ── Face configuration ── -->
+    <h3>{{localize "EKD.Editor.FaceConfig"}}</h3>
+
+    <div class="ekd-faces-grid">
+        {{#each faces}}
+        <fieldset class="ekd-face-entry">
+            <legend>{{localize "EKD.Editor.Face"}} {{this.number}}</legend>
+
+            <div class="form-group">
+                <label>{{localize "EKD.Editor.FaceLabel"}}</label>
+                <div class="form-fields">
+                    <input type="text" name="faceMap.{{@index}}.label" value="{{this.label}}" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>{{localize "EKD.Editor.FaceTexture"}}</label>
+                <div class="form-fields">
+                    <button type="button" class="file-picker" data-type="image"
+                            data-target="faceMap.{{@index}}.texture">
+                        <i class="fas fa-file-import fa-fw"></i>
+                    </button>
+                    <input class="image" type="text" name="faceMap.{{@index}}.texture"
+                           value="{{this.texture}}" placeholder="path/to/image.png" />
+                </div>
+                <img src="{{this.texture}}" class="ekd-face-preview"
+                     style="{{unless this.texture 'display:none'}}" alt="" />
+            </div>
+
+            <div class="form-group">
+                <label>{{localize "EKD.Editor.FaceBump"}}</label>
+                <div class="form-fields">
+                    <button type="button" class="file-picker" data-type="image"
+                            data-target="faceMap.{{@index}}.bump">
+                        <i class="fas fa-file-import fa-fw"></i>
+                    </button>
+                    <input class="image" type="text" name="faceMap.{{@index}}.bump"
+                           value="{{this.bump}}" placeholder="path/to/bump.png" />
+                </div>
+                <img src="{{this.bump}}" class="ekd-face-preview"
+                     style="{{unless this.bump 'display:none'}}" alt="" />
+            </div>
+
+            <div class="form-group">
+                <label>{{localize "EKD.Editor.FaceIcon"}}</label>
+                <div class="form-fields">
+                    <button type="button" class="file-picker" data-type="image"
+                            data-target="faceMap.{{@index}}.icon">
+                        <i class="fas fa-file-import fa-fw"></i>
+                    </button>
+                    <input class="image" type="text" name="faceMap.{{@index}}.icon"
+                           value="{{this.icon}}" placeholder="path/to/icon.svg" />
+                </div>
+                <img src="{{this.icon}}" class="ekd-face-preview"
+                     style="{{unless this.icon 'display:none'}}" alt="" />
+            </div>
+
+        </fieldset>
+        {{/each}}
+    </div>
+
+</form>
