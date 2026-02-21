@@ -1,0 +1,43 @@
+{
+    "id": "exotik-dices",
+    "title": "Exotik Dices",
+    "description": "Adds Exotik Dices to Dice So Nice!",
+    "version": "1.0.0",
+    "compatibility": {
+        "minimum": "13",
+        "verified": "13"
+    },
+    "authors": [
+        {
+            "name": "Nikoh",
+            "url": "https://github.com/Nikoh77"
+        }
+    ],
+    "url": "https://github.com/Nikoh77/exotik-dices",
+    "manifest": "https://github.com/Nikoh77/exotik-dices/releases/latest/download/module.json",
+    "download": "https://github.com/Nikoh77/exotik-dices/releases/latest/download/module.zip",
+    "bugs": "https://github.com/Nikoh77/exotik-dices/issues",
+    "changelog": "https://github.com/Nikoh77/exotik-dices/releases",
+    "relationships": {
+        "requires": [
+            {
+                "id": "dice-so-nice",
+                "type": "module"
+            }
+        ]
+    },
+    "esmodules": ["scripts/main.js"],
+    "styles": ["styles/ekd.css"],
+    "languages": [
+        {
+            "lang": "en",
+            "name": "English",
+            "path": "lang/en.json"
+        },
+        {
+            "lang": "it",
+            "name": "Italiano",
+            "path": "lang/it.json"
+        }
+    ]
+}

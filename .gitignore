@@ -1,0 +1,64 @@
+# ───────────────────────────────────────────
+# JavaScript / Node.js
+# ───────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build output
+dist/
+build/
+out/
+*.min.js
+*.min.css
+*.map
+
+# ───────────────────────────────────────────
+# FoundryVTT
+# ───────────────────────────────────────────
+# Eventuale link simbolico o copia locale del modulo nella installazione di Foundry
+foundry/
+*.db
+*.db-journal
+
+# ───────────────────────────────────────────
+# Editor / IDE
+# ───────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ───────────────────────────────────────────
+# Sistema operativo
+# ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# ───────────────────────────────────────────
+# Python (tools di supporto)
+# ───────────────────────────────────────────
+.venv/
+venv/
+env/
+.mypy_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# ───────────────────────────────────────────
+# Module specific
+# ───────────────────────────────────────────
+tools/
+assets/faces/

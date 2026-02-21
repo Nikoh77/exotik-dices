@@ -1,0 +1,56 @@
+/* Exotik Dices Styles */
+
+/* Hide the default d6 background square behind Exotik die result icons */
+.dice-tooltip .dice-rolls .roll.ekd-die {
+    background-image: none;
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    min-width: unset;
+    min-height: unset;
+    width: auto;
+    height: auto;
+    line-height: 1;
+    font-size: 0;
+}
+
+/* Style the SVG icons inside Exotik die results */
+.dice-tooltip .dice-rolls .roll.ekd-die img {
+    width: 28px;
+    height: 28px;
+    image-rendering: auto;
+    vertical-align: middle;
+}
+
+/* Exotik Dices total: show symbol summary instead of number */
+.dice-total.ekd-total {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: auto;
+    line-height: normal;
+    font-size: 14px;
+}
+
+.ekd-dice-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.ekd-summary-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.ekd-summary-icon {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+    border: none;
+}
