@@ -24,7 +24,8 @@
             "ReloadRequiredMsg": "La configurazione dei dadi è cambiata. È necessario ricaricare il mondo per applicare le modifiche.",
             "ReloadNow": "Ricarica Ora",
             "ReloadLater": "Dopo",
-            "Instructions": "Istruzioni"
+            "README": "README",
+            "HintNote": "Attenzione: con questo modulo non \u00e8 possibile creare dadi standard a numerazione (per cui esiste gi\u00e0 l\u2019ottimo Dice So Nice), ma solo dadi con simboli. I risultati vengono raggruppati per tipo, ad es. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660."
         },
 
         "Editor": {

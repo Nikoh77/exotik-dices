@@ -24,7 +24,8 @@
             "ReloadRequiredMsg": "Dice configuration changed. A world reload is required for changes to take effect.",
             "ReloadNow": "Reload Now",
             "ReloadLater": "Later",
-            "Instructions": "Instructions"
+            "README": "README",
+            "HintNote": "Note: this module creates symbol dice only (not standard numbered dice, for which Dice So Nice already works great). Results are grouped by type, e.g. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660."
         },
 
         "Editor": {

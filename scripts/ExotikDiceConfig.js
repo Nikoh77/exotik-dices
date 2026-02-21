@@ -406,8 +406,10 @@ export class ExotikDiceConfig extends FormApplication {
         });
 
         if (this._editingDice) {
-            // Snapshot for dirty tracking (after DOM is ready)
-            this._originalSnapshot = JSON.stringify(this._getSubmitData());
+            // Snapshot for dirty tracking (only on first render of edit session)
+            if (!this._originalSnapshot) {
+                this._originalSnapshot = JSON.stringify(this._getSubmitData());
+            }
 
             // Faces count change → resize faceMap + re-render
             el.querySelector('[name="faces"]')?.addEventListener(
@@ -468,6 +470,7 @@ export class ExotikDiceConfig extends FormApplication {
 
     _onAddDice(event) {
         event.preventDefault();
+        this._originalSnapshot = null;
         this._editingDice = {
             id: foundry.utils.randomID(),
             name: "",
@@ -493,6 +496,7 @@ export class ExotikDiceConfig extends FormApplication {
         const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = defs.find((d) => d.id === id);
         if (!dice) return;
+        this._originalSnapshot = null;
         this._editingDice = foundry.utils.deepClone(dice);
         setTimeout(() => this.render(true), 0);
     }

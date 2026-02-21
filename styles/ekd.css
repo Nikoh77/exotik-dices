@@ -85,12 +85,15 @@
 
 .ekd-config .ekd-dice-denom {
     font-family: monospace;
-    background: var(--color-bg-option, #eee);
-    padding: 1px 6px;
-    border-radius: 3px;
+    color: #fff;
+    background: #4a4a4a;
+    padding: 2px 8px;
+    border-radius: 4px;
     font-size: 12px;
-    min-width: 30px;
+    font-weight: bold;
+    min-width: 36px;
     text-align: center;
+    letter-spacing: 0.5px;
 }
 
 .ekd-config .ekd-dice-controls {
@@ -281,7 +284,19 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
+}
+
+.ekd-hint-main {
+    margin-bottom: 2px !important;
+}
+
+.ekd-hint-note {
+    font-style: italic;
+    font-size: 11px;
+    opacity: 0.85;
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
 }
 
 .ekd-settings-lang {
@@ -321,12 +336,15 @@
 
 .ekd-settings-denom {
     font-family: monospace;
-    background: var(--color-bg-option, #eee);
-    padding: 1px 6px;
-    border-radius: 3px;
+    color: #fff;
+    background: #4a4a4a;
+    padding: 2px 8px;
+    border-radius: 4px;
     font-size: 12px;
-    min-width: 30px;
+    font-weight: bold;
+    min-width: 36px;
     text-align: center;
+    letter-spacing: 0.5px;
 }
 
 .ekd-settings-controls {

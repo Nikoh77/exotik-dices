@@ -30,29 +30,22 @@ const ASSETS_PATH = `modules/${MODULE_ID}/assets`;
 const DICES_PATH = `${ASSETS_PATH}/dices`;
 const GEOMETRIES_PATH = `${ASSETS_PATH}/geometries`;
 
-/** Default dice shipped with the module (Combat Dice) */
-const COMBAT_PATH = `${DICES_PATH}/combat_dice`;
+/** Default dice shipped with the module ("Come quando fuori piove") */
+const DEFAULT_DICE_PATH = `${DICES_PATH}/come_quando_fuori_piove`;
 const DEFAULT_DICE = [
     {
         id: "ekd-default-combat",
-        name: "Combat Dice",
+        name: "Come quando fuori piove",
         denomination: "h",
         faces: 6,
         geometry: "rounded_d6",
         faceMap: [
             {
                 refFace: null,
-                label: "Skull",
-                texture: `${COMBAT_PATH}/textures/skull.png`,
-                bump: `${COMBAT_PATH}/bump_maps/skull_bump.png`,
-                icon: `${COMBAT_PATH}/chat_2d/skull.svg`,
-            },
-            {
-                refFace: 0,
-                label: "",
-                texture: "",
-                bump: "",
-                icon: "",
+                label: "Cuori",
+                texture: `${DEFAULT_DICE_PATH}/textures/heart.png`,
+                bump: `${DEFAULT_DICE_PATH}/bump_maps/heart_bump.png`,
+                icon: `${DEFAULT_DICE_PATH}/chat_2d/heart.svg`,
             },
             {
                 refFace: 0,
@@ -63,10 +56,17 @@ const DEFAULT_DICE = [
             },
             {
                 refFace: null,
-                label: "White Shield",
-                texture: `${COMBAT_PATH}/textures/shield_white.png`,
-                bump: `${COMBAT_PATH}/bump_maps/shield_white_bump.png`,
-                icon: `${COMBAT_PATH}/chat_2d/shield_white.svg`,
+                label: "Quadri",
+                texture: `${DEFAULT_DICE_PATH}/textures/diamond.png`,
+                bump: `${DEFAULT_DICE_PATH}/bump_maps/diamond_bump.png`,
+                icon: `${DEFAULT_DICE_PATH}/chat_2d/diamond.svg`,
+            },
+            {
+                refFace: null,
+                label: "Fiori",
+                texture: `${DEFAULT_DICE_PATH}/textures/club.png`,
+                bump: `${DEFAULT_DICE_PATH}/bump_maps/club_bump.png`,
+                icon: `${DEFAULT_DICE_PATH}/chat_2d/club.svg`,
             },
             {
                 refFace: 3,
@@ -77,10 +77,10 @@ const DEFAULT_DICE = [
             },
             {
                 refFace: null,
-                label: "Black Shield",
-                texture: `${COMBAT_PATH}/textures/shield_black.png`,
-                bump: `${COMBAT_PATH}/bump_maps/shield_black_bump.png`,
-                icon: `${COMBAT_PATH}/chat_2d/shield_black.svg`,
+                label: "Picche",
+                texture: `${DEFAULT_DICE_PATH}/textures/spade.png`,
+                bump: `${DEFAULT_DICE_PATH}/bump_maps/spade_bump.png`,
+                icon: `${DEFAULT_DICE_PATH}/chat_2d/spade.svg`,
             },
         ],
     },
@@ -263,18 +263,25 @@ Hooks.once("ready", () => {
         ui.notifications.warn(game.i18n.localize("EKD.DSNRequired"));
     }
 
-    // Migration: "board" → "rounded_d6"
+    // Migrations
     const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     let needsMigration = false;
+
     for (const def of defs) {
+        // Migration: "board" → "rounded_d6"
         if (def.geometry === "board") {
             def.geometry = "rounded_d6";
+            needsMigration = true;
+        }
+        // Migration: old combat dice → card suit dice
+        if (def.id === "ekd-default-combat" && def.slug === "combat_dice") {
+            Object.assign(def, DEFAULT_DICE[0]);
             needsMigration = true;
         }
     }
     if (needsMigration) {
         game.settings.set(MODULE_ID, "diceDefinitions", defs);
-        console.log(`${MODULE_ID} | Migrated geometry values`);
+        console.log(`${MODULE_ID} | Migrated dice definitions`);
     }
 });
 
@@ -360,12 +367,13 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         game.settings.get(MODULE_ID, "diceDefinitions") || [];
     const t = {
         hint: game.i18n.localize("EKD.Config.Hint"),
+        hintNote: game.i18n.localize("EKD.Config.HintNote"),
         addDice: game.i18n.localize("EKD.Config.AddDice"),
         edit: game.i18n.localize("EKD.Config.Edit"),
         del: game.i18n.localize("EKD.Config.Delete"),
         faces: game.i18n.localize("EKD.Config.FacesLabel"),
         noDice: game.i18n.localize("EKD.Config.NoDice"),
-        instructions: game.i18n.localize("EKD.Config.Instructions"),
+        readme: game.i18n.localize("EKD.Config.README"),
     };
 
     // Language display + Instructions button
@@ -376,9 +384,15 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     let listHtml = `<div class="ekd-settings-dice">`;
     listHtml += `<div class="ekd-settings-header">`;
     listHtml += `<span class="ekd-settings-lang"><i class="fas fa-globe"></i> ${langDisplay}</span>`;
-    listHtml += `<button type="button" class="ekd-settings-help"><i class="fas fa-question-circle"></i> ${t.instructions}</button>`;
+    listHtml += `<button type="button" class="ekd-settings-help"><i class="fas fa-book-open"></i> ${t.readme}</button>`;
     listHtml += `</div>`;
-    listHtml += `<p class="notes">${t.hint}</p>`;
+    listHtml += `<p class="notes ekd-hint-main">${t.hint}</p>`;
+    listHtml += `<p class="notes ekd-hint-note">${t.hintNote}</p>`;
+    listHtml += `<div class="ekd-settings-buttons">
+            <button type="button" class="ekd-settings-add">
+                <i class="fas fa-plus"></i> ${t.addDice}
+            </button>
+        </div>`;
     if (definitions.length) {
         listHtml += `<ul class="ekd-settings-list">`;
         for (const d of definitions) {
@@ -397,12 +411,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     } else {
         listHtml += `<p class="ekd-no-dice">${t.noDice}</p>`;
     }
-    listHtml += `
-        <div class="ekd-settings-buttons">
-            <button type="button" class="ekd-settings-add">
-                <i class="fas fa-plus"></i> ${t.addDice}
-            </button>
-        </div></div>`;
+    listHtml += `</div>`;
 
     // Replace the submenu form-group
     submenu.outerHTML = listHtml;
@@ -455,7 +464,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                 .then((r) => r.text())
                 .then((md) => {
                     new Dialog({
-                        title: "Exotik Dices – Instructions",
+                        title: "Exotik Dices – README",
                         content: `<div class="ekd-readme" style="max-height:500px;overflow:auto;padding:4px 8px;">${markdownToHtml(md)}</div>`,
                         buttons: { ok: { label: "OK" } },
                         default: "ok",
