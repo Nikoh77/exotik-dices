@@ -13,52 +13,63 @@ import { ExotikDiceConfig } from "./ExotikDiceConfig.js";
 /* ---------------------------------------- */
 
 const MODULE_ID = "exotik-dices";
-const FACE_PATH = `modules/${MODULE_ID}/assets/faces`;
+const ASSETS_PATH = `modules/${MODULE_ID}/assets`;
 
-/** Default die shipped with the module (Combat Die) */
+/**
+ * Asset folder convention per dice:
+ *   assets/dices/<dice_slug>/textures/   → 3D face textures (PNG)
+ *   assets/dices/<dice_slug>/bump_maps/  → 3D bump maps (PNG)
+ *   assets/dices/<dice_slug>/chat_2d/    → Chat icons (SVG/PNG)
+ *   assets/geometries/                   → Shared 3D geometries (GLB)
+ */
+const DICES_PATH = `${ASSETS_PATH}/dices`;
+const GEOMETRIES_PATH = `${ASSETS_PATH}/geometries`;
+
+/** Default dice shipped with the module (Combat Dice) */
+const COMBAT_PATH = `${DICES_PATH}/combat_dice`;
 const DEFAULT_DICE = [
     {
         id: "ekd-default-combat",
-        name: "Combat Die",
+        name: "Combat Dice",
         denomination: "h",
         faces: 6,
         geometry: "board",
         faceMap: [
             {
                 label: "Skull",
-                texture: `${FACE_PATH}/skull.png`,
-                bump: `${FACE_PATH}/skull_bump.png`,
-                icon: `${FACE_PATH}/skull.svg`,
+                texture: `${COMBAT_PATH}/textures/skull.png`,
+                bump: `${COMBAT_PATH}/bump_maps/skull_bump.png`,
+                icon: `${COMBAT_PATH}/chat_2d/skull.svg`,
             },
             {
                 label: "Skull",
-                texture: `${FACE_PATH}/skull.png`,
-                bump: `${FACE_PATH}/skull_bump.png`,
-                icon: `${FACE_PATH}/skull.svg`,
+                texture: `${COMBAT_PATH}/textures/skull.png`,
+                bump: `${COMBAT_PATH}/bump_maps/skull_bump.png`,
+                icon: `${COMBAT_PATH}/chat_2d/skull.svg`,
             },
             {
                 label: "Skull",
-                texture: `${FACE_PATH}/skull.png`,
-                bump: `${FACE_PATH}/skull_bump.png`,
-                icon: `${FACE_PATH}/skull.svg`,
+                texture: `${COMBAT_PATH}/textures/skull.png`,
+                bump: `${COMBAT_PATH}/bump_maps/skull_bump.png`,
+                icon: `${COMBAT_PATH}/chat_2d/skull.svg`,
             },
             {
                 label: "White Shield",
-                texture: `${FACE_PATH}/shield_white.png`,
-                bump: `${FACE_PATH}/shield_white_bump.png`,
-                icon: `${FACE_PATH}/shield_white.svg`,
+                texture: `${COMBAT_PATH}/textures/shield_white.png`,
+                bump: `${COMBAT_PATH}/bump_maps/shield_white_bump.png`,
+                icon: `${COMBAT_PATH}/chat_2d/shield_white.svg`,
             },
             {
                 label: "White Shield",
-                texture: `${FACE_PATH}/shield_white.png`,
-                bump: `${FACE_PATH}/shield_white_bump.png`,
-                icon: `${FACE_PATH}/shield_white.svg`,
+                texture: `${COMBAT_PATH}/textures/shield_white.png`,
+                bump: `${COMBAT_PATH}/bump_maps/shield_white_bump.png`,
+                icon: `${COMBAT_PATH}/chat_2d/shield_white.svg`,
             },
             {
                 label: "Black Shield",
-                texture: `${FACE_PATH}/shield_black.png`,
-                bump: `${FACE_PATH}/shield_black_bump.png`,
-                icon: `${FACE_PATH}/shield_black.svg`,
+                texture: `${COMBAT_PATH}/textures/shield_black.png`,
+                bump: `${COMBAT_PATH}/bump_maps/shield_black_bump.png`,
+                icon: `${COMBAT_PATH}/chat_2d/shield_black.svg`,
             },
         ],
     },
@@ -68,25 +79,25 @@ const DEFAULT_DICE = [
 /*  Runtime lookup maps                      */
 /* ---------------------------------------- */
 
-/** @type {Map<string, object>}  denomination → die definition */
-const _dieDefinitions = new Map();
+/** @type {Map<string, object>}  denomination → dice definition */
+const _diceDefinitions = new Map();
 
-/** @type {Map<string, typeof Die>}  denomination → Die subclass */
-const _dieClasses = new Map();
+/** @type {Map<string, typeof foundry.dice.terms.Die>}  denomination → dice subclass */
+const _diceClasses = new Map();
 
 /* ---------------------------------------- */
-/*  Dynamic Die Class Factory                */
+/*  Dynamic Dice Class Factory               */
 /* ---------------------------------------- */
 
 /**
- * Create a Die subclass for a given definition.
- * @param {object} def  Die definition from settings
- * @returns {typeof Die}
+ * Create a dice subclass for a given definition.
+ * @param {object} def  Dice definition from settings
+ * @returns {typeof foundry.dice.terms.Die}
  */
-function createDieClass(def) {
+function createDiceClass(def) {
     const { denomination, faces: faceCount, faceMap } = def;
 
-    const DynamicDie = class extends foundry.dice.terms.Die {
+    const DynamicDice = class extends foundry.dice.terms.Die {
         constructor(termData = {}) {
             super({ ...termData, faces: faceCount });
         }
@@ -113,11 +124,11 @@ function createDieClass(def) {
         }
     };
 
-    Object.defineProperty(DynamicDie, "name", {
-        value: `ExotikDie_${denomination}`,
+    Object.defineProperty(DynamicDice, "name", {
+        value: `ExotikDice_${denomination}`,
     });
 
-    return DynamicDie;
+    return DynamicDice;
 }
 
 /* ---------------------------------------- */
@@ -170,7 +181,7 @@ function buildChatSummary(rolls) {
     for (const roll of rolls) {
         for (const term of roll.terms || []) {
             const denom = term.constructor?.DENOMINATION;
-            if (denom && _dieDefinitions.has(denom)) {
+            if (denom && _diceDefinitions.has(denom)) {
                 for (const r of term.results) {
                     allResults.push({ ...r, denomination: denom });
                 }
@@ -183,7 +194,7 @@ function buildChatSummary(rolls) {
     const groups = new Map();
     for (const r of allResults) {
         if (!r.active) continue;
-        const def = _dieDefinitions.get(r.denomination);
+        const def = _diceDefinitions.get(r.denomination);
         const faceDef = def?.faceMap?.[r.result - 1];
         if (!faceDef) continue;
 
@@ -225,12 +236,12 @@ Hooks.once("init", () => {
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
 
     for (const def of definitions) {
-        _dieDefinitions.set(def.denomination, def);
-        const DieClass = createDieClass(def);
-        _dieClasses.set(def.denomination, DieClass);
-        CONFIG.Dice.terms[def.denomination] = DieClass;
+        _diceDefinitions.set(def.denomination, def);
+        const DiceClass = createDiceClass(def);
+        _diceClasses.set(def.denomination, DiceClass);
+        CONFIG.Dice.terms[def.denomination] = DiceClass;
         console.log(
-            `${MODULE_ID} | Registered die: d${def.denomination} – "${def.name}" (${def.faces} faces)`,
+            `${MODULE_ID} | Registered dice: d${def.denomination} – "${def.name}" (${def.faces} faces)`,
         );
     }
 });
@@ -296,7 +307,7 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
     );
     if (!boardDice.length) return;
 
-    const glbPath = `modules/${MODULE_ID}/assets/rounded_d6.glb`;
+    const glbPath = `${GEOMETRIES_PATH}/rounded_d6.glb`;
     dice3d.DiceFactory.loaderGLTF.load(glbPath, (gltf) => {
         let casinoGeometry = null;
         gltf.scene.traverse((child) => {

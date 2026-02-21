@@ -12,14 +12,14 @@
 
         "Config": {
             "Title": "Exotik Dices – Configuration",
-            "Hint": "Manage your custom dice. Each die is registered as a rollable denomination (e.g. /r 1dh).",
-            "AddDie": "Add Die",
-            "NoDice": "No dice defined yet. Click \"Add Die\" to create your first exotic die.",
+            "Hint": "Manage your custom dice. Each dice is registered as a rollable denomination (e.g. /r 1dh).",
+            "AddDice": "Add Dice",
+            "NoDice": "No dice defined yet. Click \"Add Dice\" to create your first exotic dice.",
             "FacesLabel": "faces",
             "Edit": "Edit",
             "Delete": "Delete",
             "DeleteConfirm": "Are you sure you want to delete \"{name}\"?",
-            "DieSaved": "Die \"{name}\" saved.",
+            "DiceSaved": "Dice \"{name}\" saved.",
             "ReloadRequired": "Reload Required",
             "ReloadRequiredMsg": "Dice configuration changed. A world reload is required for changes to take effect.",
             "ReloadNow": "Reload Now",
@@ -27,10 +27,11 @@
         },
 
         "Editor": {
-            "TitleNew": "New Die",
-            "TitleEdit": "Edit Die: {name}",
+            "TitleNew": "New Dice",
+            "TitleEdit": "Edit Dice: {name}",
+            "BackToList": "Back to list",
             "Name": "Name",
-            "NameHint": "Display name for this die type.",
+            "NameHint": "Display name for this dice type.",
             "Denomination": "Denomination",
             "DenominationHint": "Single character used in roll formulas (e.g. 'h' → /r 1dh). Must be unique.",
             "Faces": "Faces",
@@ -43,7 +44,9 @@
             "FaceLabel": "Label",
             "FaceTexture": "Texture (3D)",
             "FaceBump": "Bump Map (3D)",
-            "FaceIcon": "Chat Icon"
+            "FaceIcon": "Chat Icon",
+            "AssetFolder": "Asset Folder",
+            "AssetFolderHint": "Folders are created automatically when saving. Place your images in the appropriate subfolder."
         },
 
         "Validation": {

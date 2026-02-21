@@ -32,7 +32,8 @@ jobs:
             scripts/ \
             styles/ \
             lang/ \
-            assets/
+            assets/ \
+            templates/
 
       - name: Upload release assets
         env:

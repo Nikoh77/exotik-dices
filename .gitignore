@@ -61,4 +61,4 @@ __pycache__/
 # Module specific
 # ───────────────────────────────────────────
 tools/
-assets/faces/
+assets/dices/*/
