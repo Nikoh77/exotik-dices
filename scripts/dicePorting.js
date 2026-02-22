@@ -14,6 +14,7 @@ import { zipSync } from "./vendor/fflate.min.js";
 
 const MODULE_ID = "exotik-dices";
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
+const USER_DICES_PATH = `${MODULE_ID}/dices`;
 
 /* ──────────────────────────────────────────── */
 /*  Export                                       */
@@ -54,7 +55,14 @@ export async function exportDice(diceDef) {
         return;
     }
 
-    const basePath = `${DICES_PATH}/${slug}`;
+    // Determine base path: try user data first, then module assets
+    let basePath;
+    try {
+        await FilePicker.browse("data", `${USER_DICES_PATH}/${slug}`);
+        basePath = `${USER_DICES_PATH}/${slug}`;
+    } catch {
+        basePath = `${DICES_PATH}/${slug}`;
+    }
     const prefixLen = basePath.length + 1; // strip up to and including the trailing /
 
     // --- Collect all files from the dice folder ---
@@ -140,13 +148,22 @@ export async function exportDice(diceDef) {
  * @returns {Promise<number>}  Number of dice imported
  */
 export async function autoImportDice() {
-    let result;
-    try {
-        result = await FilePicker.browse("data", DICES_PATH);
-    } catch {
-        // Folder doesn't exist or cannot be read – nothing to import
-        return 0;
+    // Scan both module assets and user data folders
+    const dirsToScan = [DICES_PATH, USER_DICES_PATH];
+    const allSubDirs = [];
+
+    for (const scanPath of dirsToScan) {
+        try {
+            const result = await FilePicker.browse("data", scanPath);
+            for (const dir of result.dirs || []) {
+                allSubDirs.push(dir);
+            }
+        } catch {
+            // Folder doesn't exist – skip
+        }
     }
+
+    if (allSubDirs.length === 0) return 0;
 
     const currentDefs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     const knownSlugs = new Set(currentDefs.map((d) => d.slug).filter(Boolean));
@@ -154,8 +171,8 @@ export async function autoImportDice() {
 
     let imported = 0;
 
-    for (const dir of result.dirs || []) {
-        // dir looks like "modules/exotik-dices/assets/dices/some_slug"
+    for (const dir of allSubDirs) {
+        // dir looks like "exotik-dices/dices/some_slug" or "modules/exotik-dices/assets/dices/some_slug"
         const slug = dir.split("/").pop();
         if (knownSlugs.has(slug)) continue; // already in DB
 

@@ -30,6 +30,7 @@ const ASSETS_PATH = `modules/${MODULE_ID}/assets`;
  *   assets/geometries/                   → Shared 3D geometries (GLB)
  */
 const DICES_PATH = `${ASSETS_PATH}/dices`;
+const USER_DICES_PATH = `${MODULE_ID}/dices`;
 const GEOMETRIES_PATH = `${ASSETS_PATH}/geometries`;
 
 /** Default dice shipped with the module ("Come quando fuori piove") */
@@ -515,24 +516,70 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                 );
                 // Try to remove the dice asset folder
                 if (dice.slug) {
-                    try {
-                        const folderPath = `${DICES_PATH}/${dice.slug}`;
-                        await FilePicker.browse("data", folderPath).then(async (result) => {
-                            for (const file of result.files || []) {
-                                try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: file, source: "data" }) }); } catch {}
-                            }
-                            for (const dir of result.dirs || []) {
-                                try {
-                                    const sub = await FilePicker.browse("data", dir);
-                                    for (const f of sub.files || []) {
-                                        try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: f, source: "data" }) }); } catch {}
+                    const possiblePaths = [
+                        `${USER_DICES_PATH}/${dice.slug}`,
+                        `${DICES_PATH}/${dice.slug}`,
+                    ];
+                    for (const folderPath of possiblePaths) {
+                        try {
+                            await FilePicker.browse("data", folderPath).then(
+                                async (result) => {
+                                    for (const file of result.files || []) {
+                                        try {
+                                            await fetch(
+                                                window.location.origin +
+                                                    "/api/files",
+                                                {
+                                                    method: "DELETE",
+                                                    headers: {
+                                                        "Content-Type":
+                                                            "application/json",
+                                                    },
+                                                    body: JSON.stringify({
+                                                        path: file,
+                                                        source: "data",
+                                                    }),
+                                                },
+                                            );
+                                        } catch {}
                                     }
-                                } catch {}
-                            }
-                        });
-                        console.log(`${MODULE_ID} | Deleted asset folder: ${folderPath}`);
-                    } catch (err) {
-                        console.warn(`${MODULE_ID} | Could not delete asset folder for "${dice.name}":`, err);
+                                    for (const dir of result.dirs || []) {
+                                        try {
+                                            const sub = await FilePicker.browse(
+                                                "data",
+                                                dir,
+                                            );
+                                            for (const f of sub.files || []) {
+                                                try {
+                                                    await fetch(
+                                                        window.location.origin +
+                                                            "/api/files",
+                                                        {
+                                                            method: "DELETE",
+                                                            headers: {
+                                                                "Content-Type":
+                                                                    "application/json",
+                                                            },
+                                                            body: JSON.stringify(
+                                                                {
+                                                                    path: f,
+                                                                    source: "data",
+                                                                },
+                                                            ),
+                                                        },
+                                                    );
+                                                } catch {}
+                                            }
+                                        } catch {}
+                                    }
+                                },
+                            );
+                            console.log(
+                                `${MODULE_ID} | Deleted asset folder: ${folderPath}`,
+                            );
+                        } catch {
+                            // folder not found in this location, try next
+                        }
                     }
                 }
                 app.render(true);

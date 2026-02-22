@@ -66,20 +66,10 @@
         {{/if}}
     </div>
 
-    <!-- 3D Cube Preview (d6) -->
-    {{#if showCubePreview}}
-    <div class="ekd-preview-scene">
-        <div class="ekd-preview-cube">
-            {{#each previewFaces}}
-            <div class="ekd-pf ekd-pf-{{@index}}"
-                 {{#if this}}style="background-image:url({{this}});"{{/if}}></div>
-            {{/each}}
-        </div>
-    </div>
-    {{/if}}
+    <!-- 3D DSN Preview -->
+    <div class="ekd-3d-preview" data-dsn-type="{{previewDsnType}}" data-faces="{{faceCount}}"></div>
 
-    <!-- Flat face strip preview (non-d6) -->
-    {{#if showStripPreview}}
+    <!-- Face strip preview (all dice) -->
     <div class="ekd-preview-strip">
         {{#each previewStrip}}
         <div class="ekd-strip-face"
@@ -88,7 +78,6 @@
         </div>
         {{/each}}
     </div>
-    {{/if}}
 
     <h3>{{localize "EKD.Editor.FaceConfig"}}</h3>
 

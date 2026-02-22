@@ -10,6 +10,7 @@
 
 const MODULE_ID = "exotik-dices";
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
+const USER_DICES_PATH = `${MODULE_ID}/dices`;
 const GEOMETRIES_PATH = `modules/${MODULE_ID}/assets/geometries`;
 
 /** Supported face counts */
@@ -26,9 +27,9 @@ function nameToSlug(name) {
         .replace(/^_|_$/g, "");
 }
 
-/** Build the conventional asset base path. */
+/** Build the conventional asset base path (user data, outside modules/). */
 function diceBasePath(slug) {
-    return `${DICES_PATH}/${slug}`;
+    return `${USER_DICES_PATH}/${slug}`;
 }
 
 /**
@@ -63,8 +64,10 @@ function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
 
 /** Create asset sub-folders for a dice on the server. */
 async function ensureDiceFolders(slug) {
-    const base = `assets/dices/${slug}`;
+    const base = `${MODULE_ID}/dices/${slug}`;
     const dirs = [
+        MODULE_ID,
+        `${MODULE_ID}/dices`,
         base,
         `${base}/textures`,
         `${base}/bump_maps`,
@@ -72,10 +75,7 @@ async function ensureDiceFolders(slug) {
     ];
     for (const dir of dirs) {
         try {
-            await FilePicker.createDirectory(
-                "data",
-                `modules/${MODULE_ID}/${dir}`,
-            );
+            await FilePicker.createDirectory("data", dir);
         } catch (e) {
             if (
                 !e.message?.includes("EEXIST") &&
@@ -324,25 +324,23 @@ export class ExotikDiceConfig extends FormApplication {
               ]
             : [];
 
-        // CSS 3D cube preview (d6) – always shown
-        let previewFaces = null;
-        let showCubePreview = false;
-        if (faceCount === 6) {
-            previewFaces = [];
-            for (let i = 0; i < 6; i++) {
-                const resolved = resolveFace(faceMap, i);
-                previewFaces.push(resolved?.texture || "");
-            }
-            showCubePreview = true;
-        }
+        // Preview data for the template (face count + denomination for DSN)
+        const dsnGeoType = {
+            4: "d4",
+            6: "d6",
+            8: "d8",
+            10: "d10",
+            12: "d12",
+            20: "d20",
+        };
+        const previewDsnType = dsnGeoType[faceCount] || "d6";
 
-        // Flat face strip preview (all face counts except d6)
+        // Face strip preview (all face counts)
         const previewStrip = [];
         for (let i = 0; i < faceCount; i++) {
             const resolved = resolveFace(faceMap, i);
             previewStrip.push({ texture: resolved?.texture || "", num: i + 1 });
         }
-        const showStripPreview = faceCount !== 6;
 
         return {
             editing: true,
@@ -351,9 +349,7 @@ export class ExotikDiceConfig extends FormApplication {
             facesOptions,
             geometryOptions,
             showGeometry,
-            showCubePreview,
-            previewFaces,
-            showStripPreview,
+            previewDsnType,
             previewStrip,
             faceCount,
             slug: d.slug || "",
@@ -462,6 +458,9 @@ export class ExotikDiceConfig extends FormApplication {
             // Dirty tracking on all inputs
             el.addEventListener("input", () => this._checkDirty(el));
             el.addEventListener("change", () => this._checkDirty(el));
+
+            // Initialize DSN 3D preview
+            this._initDSNPreview(el);
         }
     }
 
@@ -539,24 +538,68 @@ export class ExotikDiceConfig extends FormApplication {
         await game.settings.set(MODULE_ID, "diceDefinitions", updated);
         // Try to remove the dice asset folder
         if (dice.slug) {
-            try {
-                const folderPath = `${DICES_PATH}/${dice.slug}`;
-                await FilePicker.browse("data", folderPath).then(async (result) => {
-                    for (const file of result.files || []) {
-                        try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: file, source: "data" }) }); } catch {}
-                    }
-                    for (const dir of result.dirs || []) {
-                        try {
-                            const sub = await FilePicker.browse("data", dir);
-                            for (const f of sub.files || []) {
-                                try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: f, source: "data" }) }); } catch {}
+            // Check both user and module paths
+            const possiblePaths = [
+                `${USER_DICES_PATH}/${dice.slug}`,
+                `${DICES_PATH}/${dice.slug}`,
+            ];
+            for (const folderPath of possiblePaths) {
+                try {
+                    await FilePicker.browse("data", folderPath).then(
+                        async (result) => {
+                            for (const file of result.files || []) {
+                                try {
+                                    await fetch(
+                                        window.location.origin + "/api/files",
+                                        {
+                                            method: "DELETE",
+                                            headers: {
+                                                "Content-Type":
+                                                    "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                path: file,
+                                                source: "data",
+                                            }),
+                                        },
+                                    );
+                                } catch {}
                             }
-                        } catch {}
-                    }
-                });
-                console.log(`${MODULE_ID} | Deleted asset folder: ${folderPath}`);
-            } catch (err) {
-                console.warn(`${MODULE_ID} | Could not delete asset folder for "${dice.name}":`, err);
+                            for (const dir of result.dirs || []) {
+                                try {
+                                    const sub = await FilePicker.browse(
+                                        "data",
+                                        dir,
+                                    );
+                                    for (const f of sub.files || []) {
+                                        try {
+                                            await fetch(
+                                                window.location.origin +
+                                                    "/api/files",
+                                                {
+                                                    method: "DELETE",
+                                                    headers: {
+                                                        "Content-Type":
+                                                            "application/json",
+                                                    },
+                                                    body: JSON.stringify({
+                                                        path: f,
+                                                        source: "data",
+                                                    }),
+                                                },
+                                            );
+                                        } catch {}
+                                    }
+                                } catch {}
+                            }
+                        },
+                    );
+                    console.log(
+                        `${MODULE_ID} | Deleted asset folder: ${folderPath}`,
+                    );
+                } catch (err) {
+                    // folder not found in this location, try next
+                }
             }
         }
         this.render(true);
@@ -577,6 +620,218 @@ export class ExotikDiceConfig extends FormApplication {
         } else {
             preview.style.display = "none";
         }
+
+        // Update strip preview for texture fields
+        const fieldName = input.name;
+        if (fieldName && fieldName.includes(".texture")) {
+            const match = fieldName.match(/faceMap\.([0-9]+)\.texture/);
+            if (match) {
+                const idx = parseInt(match[1]);
+                const form = input.closest("form");
+                if (form) {
+                    const stripFaces = form.querySelectorAll(".ekd-strip-face");
+                    if (stripFaces[idx]) {
+                        if (input.value) {
+                            stripFaces[idx].style.backgroundImage = `url(${input.value})`;
+                            const numSpan = stripFaces[idx].querySelector(".ekd-strip-num");
+                            if (numSpan) numSpan.style.display = "none";
+                        } else {
+                            stripFaces[idx].style.backgroundImage = "";
+                            const numSpan = stripFaces[idx].querySelector(".ekd-strip-num");
+                            if (numSpan) numSpan.style.display = "";
+                        }
+                    }
+                }
+            }
+
+            // Refresh DSN 3D preview
+            this._refreshDSNPreview();
+        }
+    }
+
+    /* ── DSN 3D Preview ── */
+
+    /**
+     * Initialize a Dice So Nice 3D preview in the editor.
+     * Uses DSN's DiceBox in "showcase" mode with the module's DiceFactory.
+     */
+    async _initDSNPreview(el) {
+        // Clean up any previous preview
+        this._destroyDSNPreview();
+
+        const container = el.querySelector(".ekd-3d-preview");
+        if (!container) return;
+        if (!game.dice3d?.box) {
+            container.innerHTML = '<p class="notes" style="text-align:center;opacity:0.6;padding-top:110px;">Dice So Nice non disponibile</p>';
+            return;
+        }
+
+        try {
+            const DiceBox = game.dice3d.box.constructor;
+            if (!DiceBox) return;
+
+            // Create a canvas div for the preview
+            const canvasDiv = document.createElement("div");
+            canvasDiv.classList.add("ekd-3d-canvas");
+            container.appendChild(canvasDiv);
+
+            // Get DSN global config and override for our showcase
+            const Dice3D = game.dice3d.constructor;
+            const baseConfig = typeof Dice3D.ALL_CONFIG === "function"
+                ? Dice3D.ALL_CONFIG()
+                : (typeof Dice3D.CONFIG === "function" ? Dice3D.CONFIG() : {});
+            const config = foundry.utils.mergeObject(baseConfig, {
+                dimensions: { width: 260, height: 260 },
+                autoscale: false,
+                scale: 60,
+                boxType: "showcase",
+            });
+
+            // Create a new DiceBox for preview, sharing the global DiceFactory
+            const box = new DiceBox(canvasDiv, game.dice3d.DiceFactory, config);
+            await box.initialize();
+
+            this._previewBox = box;
+            this._previewContainer = canvasDiv;
+
+            // Build and show the die
+            await this._renderPreviewDie();
+
+            // Start rotation animation
+            this._startPreviewAnimation();
+        } catch (err) {
+            console.warn(`${MODULE_ID} | DSN 3D preview init failed:`, err);
+            container.innerHTML = '<p class="notes" style="text-align:center;opacity:0.6;padding-top:110px;">Preview 3D non disponibile</p>';
+        }
+    }
+
+    /**
+     * Render (or re-render) the preview die mesh using current face textures.
+     */
+    async _renderPreviewDie() {
+        if (!this._previewBox || !this._editingDice) return;
+
+        const box = this._previewBox;
+        const d = this._editingDice;
+        const faceCount = d.faces || 6;
+        const geoMap = { 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12", 20: "d20" };
+        const dsnGeo = geoMap[faceCount] || "d6";
+        const denom = d.denomination || "x";
+        const diceType = `d${denom}`;
+
+        // Build labels and bumps from current faceMap
+        const labels = d.faceMap.map((_, i) => {
+            const r = resolveFace(d.faceMap, i);
+            return r?.texture || "";
+        });
+        const bumpMaps = d.faceMap.map((_, i) => {
+            const r = resolveFace(d.faceMap, i);
+            return r?.bump || "";
+        });
+
+        try {
+            // Remove old mesh if any
+            if (this._previewMesh && box.scene) {
+                box.scene.remove(this._previewMesh);
+                this._previewMesh = null;
+            }
+
+            // Register a temporary preview system & preset via public DSN API
+            const previewSystem = "ekd-preview";
+            game.dice3d.addSystem({ id: previewSystem, name: "EKD Preview" }, false);
+            game.dice3d.addDicePreset({
+                type: diceType,
+                labels,
+                bumpMaps,
+                system: previewSystem,
+            }, dsnGeo);
+
+            // Create the mesh using DiceFactory.create()
+            const factory = game.dice3d.DiceFactory;
+            const rendererData = box.renderer || { scopedTextureCache: {}, type: "showcase" };
+
+            // Get appearance for our preview system
+            let appearance;
+            if (typeof factory.getAppearanceForDice === "function") {
+                try {
+                    appearance = factory.getAppearanceForDice(previewSystem, diceType);
+                } catch { /* API may differ */ }
+            }
+            if (!appearance) {
+                appearance = { system: previewSystem };
+            }
+
+            const mesh = await factory.create(rendererData, diceType, appearance);
+
+            if (mesh) {
+                mesh.position.set(0, 0, 0);
+                mesh.castShadow = false;
+                mesh.receiveShadow = false;
+                box.scene?.add(mesh);
+                this._previewMesh = mesh;
+                if (typeof box.renderScene === "function") box.renderScene();
+            }
+        } catch (err) {
+            console.warn(`${MODULE_ID} | DSN preview render failed:`, err);
+        }
+    }
+
+    /**
+     * Start a smooth rotation animation for the preview die.
+     */
+    _startPreviewAnimation() {
+        if (this._previewAnimFrame) {
+            cancelAnimationFrame(this._previewAnimFrame);
+        }
+
+        const animate = () => {
+            if (!this._previewBox || !this._previewMesh) return;
+            this._previewMesh.rotation.y += 0.008;
+            this._previewMesh.rotation.x += 0.003;
+            this._previewBox.renderScene?.();
+            this._previewAnimFrame = requestAnimationFrame(animate);
+        };
+        this._previewAnimFrame = requestAnimationFrame(animate);
+    }
+
+    /**
+     * Refresh the 3D preview after a texture change (debounced).
+     */
+    _refreshDSNPreview() {
+        if (this._previewRefreshTimer) clearTimeout(this._previewRefreshTimer);
+        this._previewRefreshTimer = setTimeout(() => {
+            this._captureFormData();
+            this._renderPreviewDie();
+        }, 300);
+    }
+
+    /**
+     * Clean up the DSN preview resources.
+     */
+    _destroyDSNPreview() {
+        if (this._previewAnimFrame) {
+            cancelAnimationFrame(this._previewAnimFrame);
+            this._previewAnimFrame = null;
+        }
+        if (this._previewRefreshTimer) {
+            clearTimeout(this._previewRefreshTimer);
+            this._previewRefreshTimer = null;
+        }
+        if (this._previewMesh && this._previewBox?.scene) {
+            this._previewBox.scene.remove(this._previewMesh);
+            this._previewMesh = null;
+        }
+        if (this._previewBox) {
+            try { this._previewBox.dispose?.(); } catch {}
+            this._previewBox = null;
+        }
+        this._previewContainer = null;
+    }
+
+    /** Override close to clean up the 3D preview. */
+    async close(options) {
+        this._destroyDSNPreview();
+        return super.close(options);
     }
 
     /* ── Persistence ── */
@@ -716,7 +971,7 @@ export class ExotikDiceConfig extends FormApplication {
 
         // ── Copy asset files into the dice folder ──
         if (diceDef.slug) {
-            const basePath = `modules/${MODULE_ID}/assets/dices/${diceDef.slug}`;
+            const basePath = `${USER_DICES_PATH}/${diceDef.slug}`;
             const subfolders = { texture: "textures", bump: "bump_maps", icon: "chat_2d" };
 
             for (let i = 0; i < diceDef.faceMap.length; i++) {
