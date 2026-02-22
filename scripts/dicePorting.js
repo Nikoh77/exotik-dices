@@ -11,6 +11,7 @@
  */
 
 import { zipSync } from "./vendor/fflate.min.js";
+import { deleteServerPath } from "./ExotikDiceConfig.js";
 
 const MODULE_ID = "exotik-dices";
 
@@ -274,24 +275,11 @@ export async function autoImportDice() {
         );
 
         // Delete dice.json so it won't be re-imported on next startup
-        try {
-            const deleteRoute = (typeof foundry !== "undefined" && foundry.utils?.getRoute)
-                ? foundry.utils.getRoute("/api/files")
-                : "/api/files";
-            console.log(`${MODULE_ID} | autoImport: deleting ${diceJsonPath} via ${deleteRoute}`);
-            const delResp = await fetch(deleteRoute, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ source: "data", path: diceJsonPath }),
-            });
-            if (!delResp.ok) {
-                const body = await delResp.text().catch(() => "");
-                console.warn(`${MODULE_ID} | autoImport: DELETE ${diceJsonPath} → HTTP ${delResp.status}: ${body}`);
-            } else {
-                console.log(`${MODULE_ID} | autoImport: deleted ${diceJsonPath}`);
-            }
-        } catch (e) {
-            console.warn(`${MODULE_ID} | autoImport: could not delete ${diceJsonPath}`, e);
+        const deleted = await deleteServerPath(diceJsonPath);
+        if (!deleted) {
+            console.warn(
+                `${MODULE_ID} | autoImport: could not delete ${diceJsonPath} – file will persist but slug-check prevents re-import`,
+            );
         }
     }
 

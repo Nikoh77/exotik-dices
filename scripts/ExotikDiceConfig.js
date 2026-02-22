@@ -77,32 +77,60 @@ function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
 
 /**
  * Delete a single file or empty directory on the Foundry server.
- * Tries the standard Foundry file-management endpoint.
- * @param {string} targetPath  Server-relative path (e.g. "exotik-dices/dices/slug/file.png")
+ *
+ * Foundry VTT does not expose a public file-delete API.  Internally
+ * FilePicker uses `_manageFiles` (socket-based) for browse / createDirectory.
+ * We try the same mechanism with action "delete", falling back to HTTP
+ * endpoints if available.
+ *
+ * @param {string} targetPath  Server-relative path
  * @returns {Promise<boolean>}
  */
-async function _deleteServerPath(targetPath) {
-    const route = (typeof foundry !== "undefined" && foundry.utils?.getRoute)
-        ? foundry.utils.getRoute("/api/files")
-        : "/api/files";
+export async function deleteServerPath(targetPath) {
+    console.log(`${MODULE_ID} | deleteServerPath: ${targetPath}`);
 
-    try {
-        const resp = await fetch(route, {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ source: "data", path: targetPath }),
-        });
-        if (!resp.ok) {
-            const body = await resp.text().catch(() => "");
-            console.warn(`${MODULE_ID} | DELETE ${targetPath} → HTTP ${resp.status}: ${body}`);
-            return false;
+    // ── Approach 1: FilePicker._manageFiles (socket-based, most reliable) ──
+    if (typeof FP._manageFiles === "function") {
+        for (const action of ["delete", "deleteFile", "removeFile"]) {
+            try {
+                await FP._manageFiles(
+                    { source: "data", target: targetPath },
+                    action,
+                );
+                console.log(`${MODULE_ID} | Deleted via _manageFiles("${action}"): ${targetPath}`);
+                return true;
+            } catch {
+                // action not supported – try next
+            }
         }
-        console.log(`${MODULE_ID} | Deleted: ${targetPath}`);
-        return true;
-    } catch (e) {
-        console.warn(`${MODULE_ID} | DELETE ${targetPath} error:`, e);
-        return false;
     }
+
+    // ── Approach 2: HTTP DELETE to known Foundry routes ──
+    const prefix =
+        typeof window !== "undefined" && window.ROUTE_PREFIX
+            ? `/${window.ROUTE_PREFIX}`
+            : "";
+    const urls = [`${prefix}/upload`, `${prefix}/api/files`];
+
+    for (const url of urls) {
+        try {
+            const resp = await fetch(url, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ source: "data", path: targetPath }),
+            });
+            if (resp.ok) {
+                console.log(`${MODULE_ID} | Deleted via HTTP DELETE ${url}: ${targetPath}`);
+                return true;
+            }
+            console.log(`${MODULE_ID} | HTTP DELETE ${url} → ${resp.status}`);
+        } catch {
+            // endpoint not available
+        }
+    }
+
+    console.warn(`${MODULE_ID} | Could not delete "${targetPath}" – no supported method found.`);
+    return false;
 }
 
 /**
@@ -120,11 +148,14 @@ export async function deleteFolderRecursive(folderPath) {
         return; // folder doesn't exist
     }
 
-    console.log(`${MODULE_ID} | Found ${(result.files||[]).length} files, ${(result.dirs||[]).length} sub-dirs in ${folderPath}`);
+    console.log(
+        `${MODULE_ID} | Found ${(result.files || []).length} files, ` +
+        `${(result.dirs || []).length} sub-dirs in ${folderPath}`,
+    );
 
     // Delete files in this directory
     for (const file of result.files || []) {
-        await _deleteServerPath(file);
+        await deleteServerPath(file);
     }
 
     // Recurse into subdirectories
@@ -133,7 +164,7 @@ export async function deleteFolderRecursive(folderPath) {
     }
 
     // Delete the (now empty) folder itself
-    await _deleteServerPath(folderPath);
+    await deleteServerPath(folderPath);
 }
 
 /** Create asset sub-folders for a dice on the server. */

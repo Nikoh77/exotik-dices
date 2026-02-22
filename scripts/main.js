@@ -12,6 +12,7 @@ import {
     markdownToHtml,
     resolveFace,
     deleteFolderRecursive,
+    deleteServerPath,
 } from "./ExotikDiceConfig.js";
 
 import { exportDice, autoImportDice } from "./dicePorting.js";
@@ -580,7 +581,16 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             event.preventDefault();
             autoImportDice().then((count) => {
                 app.render(true);
-                if (count > 0) promptReload();
+                if (count > 0) {
+                    promptReload();
+                } else {
+                    ui.notifications.info(
+                        game.i18n.localize("EKD.Import.NoneFound"),
+                    );
+                }
+            }).catch((err) => {
+                console.error(`${MODULE_ID} | autoImportDice error:`, err);
+                ui.notifications.error("Auto-import failed – see console.");
             });
         }
 
@@ -642,14 +652,17 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
-    // Register system without making it selectable in DSN's appearance dropdown.
-    // Our custom dice presets work regardless — they are tied to unique denominations.
+    // Register "Exotik Dices" as a selectable system in DSN dropdown.
+    // Not set as default — users opt-in by selecting it.
     dice3d.addSystem({ id: "ekd", name: "Exotik Dices" }, false);
 
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     const factory = dice3d.DiceFactory;
 
-    // Register DSN presets (resolving face references).
+    // Set of dice types we own (e.g. "dh", "dc") – used by the create patch.
+    const ekdDiceTypes = new Set();
+
+    // ── Register DSN presets ──
     // We create DicePreset objects manually instead of using dice3d.addDicePreset()
     // because that method crashes on custom denominations not registered in
     // CONFIG.Dice.terms (it tries CONFIG.Dice.terms[denominator].name).
@@ -689,22 +702,21 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             preset.inertia = standardModel.inertia;
             preset.system = "ekd";
 
-            // Add only to the "ekd" system (hidden from DSN dropdown).
-            // Using factory.register() would add to ALL systems, making
-            // our presets appear in DSN's configuration UI.
+            // Register ONLY in the "ekd" system.
+            // The monkey-patch below forces DSN to use "ekd" for our dice
+            // types at render time, so they always display correctly.
             factory.systems.get("ekd").dice.set(diceType, preset);
 
-            // DSN auto-discovers dice from CONFIG.Dice.terms and adds default
-            // presets to "standard" and every other visible system.  Remove
-            // those auto-generated entries so our dice don't clutter the
-            // DSN appearance panel.
+            // Remove auto-generated default presets from all other systems
+            // so our dice don't appear in their preset lists.
             for (const [sysId, sys] of factory.systems) {
                 if (sysId === "ekd") continue;
                 sys.dice.delete(diceType);
             }
 
+            ekdDiceTypes.add(diceType);
             console.log(
-                `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo}`,
+                `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo} (ekd only)`,
             );
         } catch (err) {
             console.warn(
@@ -734,34 +746,33 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     const customGeoUsers = definitions.filter(
         (d) => d.geometry !== "standard" && customGeoFiles.has(d.geometry),
     );
-    if (!customGeoUsers.length) return;
 
     // Load each unique GLB file
     const loadedGeometries = new Map();
-    const uniqueGeos = [...new Set(customGeoUsers.map((d) => d.geometry))];
-    const loadPromises = uniqueGeos.map(
-        (geoName) =>
-            new Promise((resolve) => {
-                const glbPath = customGeoFiles.get(geoName);
-                dice3d.DiceFactory.loaderGLTF.load(glbPath, (gltf) => {
-                    let geometry = null;
-                    gltf.scene.traverse((child) => {
-                        if (child.isMesh && !geometry)
-                            geometry = child.geometry;
+    if (customGeoUsers.length) {
+        const uniqueGeos = [...new Set(customGeoUsers.map((d) => d.geometry))];
+        const loadPromises = uniqueGeos.map(
+            (geoName) =>
+                new Promise((resolve) => {
+                    const glbPath = customGeoFiles.get(geoName);
+                    dice3d.DiceFactory.loaderGLTF.load(glbPath, (gltf) => {
+                        let geometry = null;
+                        gltf.scene.traverse((child) => {
+                            if (child.isMesh && !geometry)
+                                geometry = child.geometry;
+                        });
+                        if (geometry) {
+                            loadedGeometries.set(geoName, geometry);
+                            console.log(
+                                `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
+                            );
+                        }
+                        resolve();
                     });
-                    if (geometry) {
-                        loadedGeometries.set(geoName, geometry);
-                        console.log(
-                            `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
-                        );
-                    }
-                    resolve();
-                });
-            }),
-    );
-    await Promise.all(loadPromises);
-
-    if (!loadedGeometries.size) return;
+                }),
+        );
+        await Promise.all(loadPromises);
+    }
 
     // Build denomination → geometry map
     const denomToGeo = new Map();
@@ -770,28 +781,43 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
         if (geo) denomToGeo.set(`d${def.denomination}`, geo);
     }
 
-    // Monkey-patch DiceFactory.create for geometry swap
-    const origCreate = dice3d.DiceFactory.create.bind(dice3d.DiceFactory);
-    dice3d.DiceFactory.create = async function (t, i, r) {
-        const mesh = await origCreate(t, i, r);
-        const customGeo = denomToGeo.get(i);
-        if (customGeo && mesh) {
-            const baseScale = t.type === "board" ? this.baseScale : 60;
-            const s = baseScale / 100;
-            const geo = customGeo.clone();
-            geo.scale(s, s, s);
-            if (mesh.isMesh) {
-                mesh.geometry = geo;
-            } else {
-                mesh.traverse((child) => {
-                    if (child.isMesh) child.geometry = geo;
-                });
+    // ── Monkey-patch DiceFactory.create ──
+    // Two responsibilities:
+    //  1. Force appearance.system → "ekd" for our dice types so DSN always
+    //     uses our custom textures/labels, regardless of the system the user
+    //     has selected in DSN settings.
+    //  2. Swap geometry for dice that use custom GLB models.
+    if (ekdDiceTypes.size > 0 || denomToGeo.size > 0) {
+        const origCreate = dice3d.DiceFactory.create.bind(dice3d.DiceFactory);
+        dice3d.DiceFactory.create = async function (t, i, r) {
+            // Force our dice to resolve from the "ekd" system
+            if (ekdDiceTypes.has(i) && r) {
+                r = Object.assign({}, r, { system: "ekd" });
             }
-        }
-        return mesh;
-    };
 
-    console.log(
-        `${MODULE_ID} | Geometry swap installed for: ${[...denomToGeo.keys()].join(", ")}`,
-    );
+            const mesh = await origCreate(t, i, r);
+
+            // Geometry swap
+            const customGeo = denomToGeo.get(i);
+            if (customGeo && mesh) {
+                const baseScale = t.type === "board" ? this.baseScale : 60;
+                const s = baseScale / 100;
+                const geo = customGeo.clone();
+                geo.scale(s, s, s);
+                if (mesh.isMesh) {
+                    mesh.geometry = geo;
+                } else {
+                    mesh.traverse((child) => {
+                        if (child.isMesh) child.geometry = geo;
+                    });
+                }
+            }
+            return mesh;
+        };
+
+        console.log(
+            `${MODULE_ID} | DiceFactory.create patched – system override: [${[...ekdDiceTypes].join(", ")}]` +
+            (denomToGeo.size ? `, geometry swap: [${[...denomToGeo.keys()].join(", ")}]` : ""),
+        );
+    }
 });

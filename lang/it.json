@@ -41,6 +41,7 @@
 
         "Import": {
             "Success": "{count} dado/i importato/i dal filesystem.",
+            "NoneFound": "Nessun nuovo dado trovato da importare.",
             "DenomConflict": "Impossibile importare \"{name}\": la denominazione \"{denom}\" \u00e8 gi\u00e0 usata da \"{existing}\"."
         },
 

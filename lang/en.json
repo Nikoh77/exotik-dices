@@ -41,6 +41,7 @@
 
         "Import": {
             "Success": "{count} dice(s) imported from filesystem.",
+            "NoneFound": "No new dice found to import.",
             "DenomConflict": "Cannot import \"{name}\": denomination \"{denom}\" is already used by \"{existing}\"."
         },
 
