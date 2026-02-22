@@ -33,6 +33,15 @@ const _diceDefinitions = new Map();
 /** Set of dice types we own (e.g. "dh", "dc") — shared with DSN monkey-patch. */
 const _ekdDiceTypes = new Set();
 
+/** denomination ("dh") -> BufferGeometry — custom GLB geometries for each die. */
+const _denomToGeo = new Map();
+
+/** geometry name -> BufferGeometry — cache of loaded GLB geometries. */
+const _loadedGeometries = new Map();
+
+/** geometry name -> file path — available GLB files in the geometries folder. */
+let _customGeoFiles = new Map();
+
 /* ---------------------------------------- */
 /*  Dynamic Dice Class Factory               */
 /* ---------------------------------------- */
@@ -141,13 +150,89 @@ function registerDiceOnTheFly(definitions) {
                 console.warn(`${MODULE_ID} | DSN preset error for ${diceType}:`, err);
             }
         }
-        // Await texture loading so labels become Image objects before
-        // any render can use them (prevents text-instead-of-texture bug).
-        factory.preloadPresets(true).then(() => {
+
+        // ── Update geometry swap map ──
+        // Rebuild _denomToGeo based on the new definitions.  Load any
+        // new GLB geometries that haven't been cached yet.
+        _updateGeometryMap(definitions, factory).then(() => {
+            // Await texture loading so labels become Image objects before
+            // any render can use them (prevents text-instead-of-texture bug).
+            return factory.preloadPresets(true);
+        }).then(() => {
             factory.disposeCachedMaterials();
-            console.log(`${MODULE_ID} | DSN presets re-registered and textures loaded`);
+            console.log(`${MODULE_ID} | DSN presets re-registered, geometries & textures loaded`);
         });
     }
+}
+
+/**
+ * Rebuild the _denomToGeo map from the current definitions.
+ * Loads any new GLB geometries that haven't been cached in
+ * _loadedGeometries yet.
+ *
+ * @param {object[]} definitions  Current dice definitions
+ * @param {object}   factory      DiceFactory instance (for loaderGLTF)
+ */
+async function _updateGeometryMap(definitions, factory) {
+    // Refresh the available GLB files list
+    try {
+        const result = await FP.browse("data", GEOMETRIES_PATH);
+        _customGeoFiles.clear();
+        for (const fp of result.files || []) {
+            if (!fp.endsWith(".glb")) continue;
+            const name = fp.split("/").pop().replace(".glb", "");
+            _customGeoFiles.set(name, fp);
+        }
+    } catch (e) {
+        // Keep whatever we had before
+    }
+
+    // Find dice that need custom geometry
+    const customDefs = definitions.filter(
+        (d) => d.geometry !== "standard" && _customGeoFiles.has(d.geometry),
+    );
+
+    // Load any geometry not yet cached
+    const toLoad = [
+        ...new Set(
+            customDefs
+                .map((d) => d.geometry)
+                .filter((g) => !_loadedGeometries.has(g)),
+        ),
+    ];
+    if (toLoad.length && factory?.loaderGLTF) {
+        const loadPromises = toLoad.map(
+            (geoName) =>
+                new Promise((resolve) => {
+                    const glbPath = _customGeoFiles.get(geoName);
+                    factory.loaderGLTF.load(glbPath, (gltf) => {
+                        let geometry = null;
+                        gltf.scene.traverse((child) => {
+                            if (child.isMesh && !geometry)
+                                geometry = child.geometry;
+                        });
+                        if (geometry) {
+                            _loadedGeometries.set(geoName, geometry);
+                            console.log(
+                                `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
+                            );
+                        }
+                        resolve();
+                    });
+                }),
+        );
+        await Promise.all(loadPromises);
+    }
+
+    // Rebuild the denomination -> geometry map
+    _denomToGeo.clear();
+    for (const def of customDefs) {
+        const geo = _loadedGeometries.get(def.geometry);
+        if (geo) _denomToGeo.set(`d${def.denomination}`, geo);
+    }
+    console.log(
+        `${MODULE_ID} | Geometry map updated: [${[..._denomToGeo.keys()].join(", ") || "none"}]`,
+    );
 }
 
 /* ---------------------------------------- */
@@ -498,9 +583,13 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                 .then((md) => {
                     new Dialog({
                         title: "Exotik Dices - README",
-                        content: `<div class="ekd-readme" style="max-height:500px;overflow:auto;padding:4px 8px;">${markdownToHtml(md)}</div>`,
+                        content: `<div class="ekd-readme">${markdownToHtml(md)}</div>`,
                         buttons: { ok: { label: "OK" } },
                         default: "ok",
+                    }, {
+                        width: 680,
+                        height: 600,
+                        resizable: true,
                     }).render(true);
                 })
                 .catch(() => {
@@ -602,68 +691,18 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | DSN preset textures loaded`);
 
     // ── Dynamic geometry swap ──
-    // Scan geometries folder for .glb files
-    let customGeoFiles;
-    try {
-        const result = await FP.browse("data", GEOMETRIES_PATH);
-        customGeoFiles = new Map();
-        for (const fp of result.files || []) {
-            if (!fp.endsWith(".glb")) continue;
-            const name = fp.split("/").pop().replace(".glb", "");
-            customGeoFiles.set(name, fp);
-        }
-    } catch (e) {
-        console.warn(`${MODULE_ID} | Could not scan geometries:`, e);
-        customGeoFiles = new Map();
-    }
-
-    // Find dice that use custom geometries
-    const customGeoUsers = definitions.filter(
-        (d) => d.geometry !== "standard" && customGeoFiles.has(d.geometry),
-    );
-
-    // Load each unique GLB file
-    const loadedGeometries = new Map();
-    if (customGeoUsers.length) {
-        const uniqueGeos = [...new Set(customGeoUsers.map((d) => d.geometry))];
-        const loadPromises = uniqueGeos.map(
-            (geoName) =>
-                new Promise((resolve) => {
-                    const glbPath = customGeoFiles.get(geoName);
-                    factory.loaderGLTF.load(glbPath, (gltf) => {
-                        let geometry = null;
-                        gltf.scene.traverse((child) => {
-                            if (child.isMesh && !geometry)
-                                geometry = child.geometry;
-                        });
-                        if (geometry) {
-                            loadedGeometries.set(geoName, geometry);
-                            console.log(
-                                `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
-                            );
-                        }
-                        resolve();
-                    });
-                }),
-        );
-        await Promise.all(loadPromises);
-    }
-
-    // Build denomination -> geometry map
-    const denomToGeo = new Map();
-    for (const def of customGeoUsers) {
-        const geo = loadedGeometries.get(def.geometry);
-        if (geo) denomToGeo.set(`d${def.denomination}`, geo);
-    }
+    // Populate the module-level geometry maps from initial definitions.
+    await _updateGeometryMap(definitions, factory);
 
     // ── Monkey-patch DiceFactory.create ──
+    // Always installed so that dice added on-the-fly are handled.
     // Forces system="ekd" at render time so our textures are always used
     // regardless of the user's DSN system selection.  Also guarantees
     // that presets' textures are fully loaded as HTMLImageElement objects
     // before the mesh is created; without this defensive await, DSN's
     // createTextMaterial would draw the raw URL string as text whenever
     // the preset hasn't finished loading yet (race condition).
-    if (_ekdDiceTypes.size > 0 || denomToGeo.size > 0) {
+    {
         const origCreate = factory.create.bind(factory);
         factory.create = async function (t, i, r) {
             // Force our dice to resolve from the "ekd" system
@@ -687,7 +726,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             const mesh = await origCreate(t, i, r);
 
             // Geometry swap for custom GLB models
-            const customGeo = denomToGeo.get(i);
+            const customGeo = _denomToGeo.get(i);
             if (customGeo && mesh) {
                 const baseScale = t.type === "board" ? this.baseScale : 60;
                 const s = baseScale / 100;
@@ -707,7 +746,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
         console.log(
             `${MODULE_ID} | DiceFactory.create patched` +
             (_ekdDiceTypes.size ? ` - system override: [${[..._ekdDiceTypes].join(", ")}]` : "") +
-            (denomToGeo.size ? ` - geometry swap: [${[...denomToGeo.keys()].join(", ")}]` : ""),
+            (_denomToGeo.size ? ` - geometry swap: [${[..._denomToGeo.keys()].join(", ")}]` : ""),
         );
     }
 

@@ -34,6 +34,8 @@ That said, the structure, organization, integrations, and the setup for future d
 
 ## Usage
 
+<!-- note-start -->
+
 ### Rolling Dice
 
 Each custom dice is assigned a single-character denomination (e.g. `h`). Roll it with:
@@ -42,6 +44,10 @@ Each custom dice is assigned a single-character denomination (e.g. `h`). Roll it
 /r 3dh        (roll three combat dice)
 /r 2dh + 1d6  (mix with standard dice)
 ```
+
+<!-- note-end -->
+
+<!-- note-start -->
 
 ### Configuring Dice
 
@@ -57,9 +63,11 @@ Each custom dice is assigned a single-character denomination (e.g. `h`). Roll it
    - **Face Configuration** – For each face, set a label, 3D texture, bump map, and chat icon. Optionally reference another face to inherit its assets.
 6. Click **Save** and reload the world when prompted.
 
+<!-- note-end -->
+
 ### Asset Folders
 
-You can choose where to save your dice;w hen you save a dice, the module automatically creates folders:
+You can choose where to save your dice; when you save a dice, the module automatically creates folders:
 ```
 path-you-have-chosen/exotik-dices/assets/dices/<dice_slug>/
     textures/    → 3D face textures (PNG)

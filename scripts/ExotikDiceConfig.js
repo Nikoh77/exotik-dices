@@ -104,10 +104,31 @@ async function ensureDiceFolders(slug) {
 
 /** Simple markdown → HTML for README display. */
 export function markdownToHtml(md) {
-    return md
+    // Preserve fenced code blocks from other transformations
+    const codeBlocks = [];
+    let result = md.replace(/```[\s\S]*?```/g, (m) => {
+        const inner = m.replace(/```\w*\n?/, "").replace(/```$/, "");
+        codeBlocks.push(`<pre><code>${inner.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`);
+        return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
+    });
+
+    // Extract <!-- note-start --> / <!-- note-end --> markers before escaping
+    result = result
+        .replace(/<!--\s*note-start\s*-->/g, "%%NOTE_START%%")
+        .replace(/<!--\s*note-end\s*-->/g, "%%NOTE_END%%");
+
+    result = result
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
+        // Images: ![alt](src)
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
+            // Resolve relative paths to module folder
+            const resolved = src.startsWith("http") ? src : `modules/${MODULE_ID}/${src}`;
+            return `<img src="${resolved}" alt="${alt}" style="max-width:100%;border-radius:6px;">`;
+        })
+        // Links: [text](url)
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
         .replace(/^#### (.+)$/gm, "<h4>$1</h4>")
         .replace(/^### (.+)$/gm, "<h3>$1</h3>")
         .replace(/^## (.+)$/gm, "<h2>$1</h2>")
@@ -115,14 +136,18 @@ export function markdownToHtml(md) {
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/\*(.+?)\*/g, "<em>$1</em>")
         .replace(/`([^`\n]+)`/g, "<code>$1</code>")
-        .replace(/```[\s\S]*?```/g, (m) => {
-            const inner = m.replace(/```\w*\n?/, "").replace(/```$/, "");
-            return `<pre><code>${inner}</code></pre>`;
-        })
         .replace(/^\- (.+)$/gm, "<li>$1</li>")
         .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
         .replace(/((?:<li>.*<\/li>\s*)+)/g, "<ul>$1</ul>")
         .replace(/\n{2,}/g, "<br>");
+
+    // Restore code blocks and note markers
+    result = result.replace(/%%CODEBLOCK_(\d+)%%/g, (_, i) => codeBlocks[i]);
+    result = result
+        .replace(/%%NOTE_START%%/g, '<div class="ekd-note">')
+        .replace(/%%NOTE_END%%/g, "</div>");
+
+    return result;
 }
 
 /* ═══════════════════════════════════════════════ */
