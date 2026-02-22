@@ -22,6 +22,7 @@
             "Edit": "Edit",
             "Delete": "Delete",
             "DeleteConfirm": "Are you sure you want to delete \"{name}\"?",
+            "DeleteFolderHint": "The dice folder will remain on disk. Remove it manually to complete deletion.",
             "DiceSaved": "Dice \"{name}\" saved.",
             "ReloadRequired": "Reload Required",
             "ReloadRequiredMsg": "Dice configuration changed. A world reload is required for changes to take effect.",
@@ -40,9 +41,9 @@
         },
 
         "Import": {
-            "Success": "{count} dice(s) imported from filesystem.",
-            "NoneFound": "No new dice found to import.",
-            "DenomConflict": "Cannot import \"{name}\": denomination \"{denom}\" is already used by \"{existing}\"."
+            "Success": "{count} dice(s) synced from filesystem.",
+            "NoneFound": "Filesystem and cache are in sync. No changes detected.",
+            "DenomConflict": "Cannot load \"{name}\": denomination \"{denom}\" is already used by \"{existing}\"."
         },
 
         "Editor": {
@@ -78,7 +79,8 @@
             "DenominationLength": "Denomination must be exactly one character.",
             "DenominationReserved": "The denomination \"{denom}\" is reserved by Foundry VTT or another module.",
             "DenominationConflict": "The denomination \"{denom}\" is already used by \"{name}\".",
-            "FaceRefLoop": "Face reference loop detected. Please fix circular references."
+            "FaceRefLoop": "Face reference loop detected. Please fix circular references.",
+            "SaveFailed": "Failed to write dice.json to disk."
         }
     }
 }

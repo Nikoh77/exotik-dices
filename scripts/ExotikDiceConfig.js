@@ -8,6 +8,8 @@
  *  2. ExotikDiceConfig.editDice() → editor (used by settings injection)
  */
 
+import { writeDiceJson } from "./dicePorting.js";
+
 const MODULE_ID = "exotik-dices";
 
 /** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
@@ -73,98 +75,6 @@ function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
         current = faceMap[current]?.refFace ?? null;
     }
     return false;
-}
-
-/**
- * Delete a single file or empty directory on the Foundry server.
- *
- * Foundry VTT does not expose a public file-delete API.  Internally
- * FilePicker uses `_manageFiles` (socket-based) for browse / createDirectory.
- * We try the same mechanism with action "delete", falling back to HTTP
- * endpoints if available.
- *
- * @param {string} targetPath  Server-relative path
- * @returns {Promise<boolean>}
- */
-export async function deleteServerPath(targetPath) {
-    console.log(`${MODULE_ID} | deleteServerPath: ${targetPath}`);
-
-    // ── Approach 1: FilePicker._manageFiles (socket-based, most reliable) ──
-    if (typeof FP._manageFiles === "function") {
-        for (const action of ["delete", "deleteFile", "removeFile"]) {
-            try {
-                await FP._manageFiles(
-                    { source: "data", target: targetPath },
-                    action,
-                );
-                console.log(`${MODULE_ID} | Deleted via _manageFiles("${action}"): ${targetPath}`);
-                return true;
-            } catch {
-                // action not supported – try next
-            }
-        }
-    }
-
-    // ── Approach 2: HTTP DELETE to known Foundry routes ──
-    const prefix =
-        typeof window !== "undefined" && window.ROUTE_PREFIX
-            ? `/${window.ROUTE_PREFIX}`
-            : "";
-    const urls = [`${prefix}/upload`, `${prefix}/api/files`];
-
-    for (const url of urls) {
-        try {
-            const resp = await fetch(url, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ source: "data", path: targetPath }),
-            });
-            if (resp.ok) {
-                console.log(`${MODULE_ID} | Deleted via HTTP DELETE ${url}: ${targetPath}`);
-                return true;
-            }
-            console.log(`${MODULE_ID} | HTTP DELETE ${url} → ${resp.status}`);
-        } catch {
-            // endpoint not available
-        }
-    }
-
-    console.warn(`${MODULE_ID} | Could not delete "${targetPath}" – no supported method found.`);
-    return false;
-}
-
-/**
- * Recursively delete a folder and all its contents from the Foundry data dir.
- * Deletes files first, then sub-directories (depth-first), then the folder itself.
- * @param {string} folderPath  Server-relative path
- */
-export async function deleteFolderRecursive(folderPath) {
-    console.log(`${MODULE_ID} | deleteFolderRecursive: ${folderPath}`);
-    let result;
-    try {
-        result = await FP.browse("data", folderPath);
-    } catch {
-        console.log(`${MODULE_ID} | Folder not found (browse failed): ${folderPath}`);
-        return; // folder doesn't exist
-    }
-
-    console.log(
-        `${MODULE_ID} | Found ${(result.files || []).length} files, ` +
-        `${(result.dirs || []).length} sub-dirs in ${folderPath}`,
-    );
-
-    // Delete files in this directory
-    for (const file of result.files || []) {
-        await deleteServerPath(file);
-    }
-
-    // Recurse into subdirectories
-    for (const dir of result.dirs || []) {
-        await deleteFolderRecursive(dir);
-    }
-
-    // Delete the (now empty) folder itself
-    await deleteServerPath(folderPath);
 }
 
 /** Create asset sub-folders for a dice on the server. */
@@ -619,7 +529,8 @@ export class ExotikDiceConfig extends FormApplication {
         const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = defs.find((d) => d.id === id);
         if (!dice) return;
-        if (dice.id === "ekd-default-combat") {
+        // Dice shipped with the module (assets under modules/) are read-only
+        if (dice.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`)) {
             ui.notifications.warn(
                 game.i18n.localize("EKD.Config.DefaultProtected"),
             );
@@ -637,28 +548,23 @@ export class ExotikDiceConfig extends FormApplication {
         const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = defs.find((d) => d.id === id);
         if (!dice) return;
-        if (dice.id === "ekd-default-combat") {
+        // Dice shipped with the module (assets under modules/) are read-only
+        if (dice.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`)) {
             ui.notifications.warn(game.i18n.localize("EKD.Config.DefaultProtected"));
             return;
         }
         const confirmed = await Dialog.confirm({
             title: game.i18n.localize("EKD.Config.Delete"),
-            content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`,
+            content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`
+                + `<p class="notes">${game.i18n.localize("EKD.Config.DeleteFolderHint")}</p>`,
         });
         if (!confirmed) return;
         const updated = defs.filter((d) => d.id !== id);
         await game.settings.set(MODULE_ID, "diceDefinitions", updated);
-        // Try to remove the dice asset folder
-        if (dice.slug) {
-            const possiblePaths = [
-                `${getUserDicePath()}/${dice.slug}`,
-                `${DICES_PATH}/${dice.slug}`,
-            ];
-            for (const folderPath of possiblePaths) {
-                await deleteFolderRecursive(folderPath);
-                console.log(`${MODULE_ID} | Deleted asset folder: ${folderPath}`);
-            }
-        }
+        console.log(
+            `${MODULE_ID} | Dice "${dice.name}" removed from cache` +
+            (dice.slug ? ` (remove folder "${dice.slug}" to complete deletion)` : ""),
+        );
         this.render(true);
         promptReload();
     }
@@ -1213,7 +1119,20 @@ export class ExotikDiceConfig extends FormApplication {
             }
         }
 
-        // ── Save ──
+        // ── Write dice.json to filesystem (source of truth) ──
+        if (diceDef.slug) {
+            const diceFolder = `${getUserDicePath()}/${diceDef.slug}`;
+            try {
+                await writeDiceJson(diceDef, diceFolder);
+            } catch (err) {
+                ui.notifications.error(
+                    game.i18n.localize("EKD.Validation.SaveFailed") || "Failed to write dice.json",
+                );
+                return;
+            }
+        }
+
+        // ── Update DB cache ──
         if (existingIdx >= 0) currentDefs[existingIdx] = diceDef;
         else currentDefs.push(diceDef);
         await game.settings.set(MODULE_ID, "diceDefinitions", currentDefs);

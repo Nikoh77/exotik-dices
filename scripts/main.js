@@ -2,8 +2,8 @@
  * Exotik Dices Module for Foundry VTT v13+
  *
  * Dynamically registers user-defined custom dice with Dice So Nice
- * integration.  Dice definitions are stored in module settings and
- * can be managed through Configure Settings → Exotik Dices.
+ * integration.  Dice definitions are stored on the filesystem (dice.json
+ * per dice folder) with a DB cache for fast synchronous init.
  */
 
 import {
@@ -11,11 +11,9 @@ import {
     promptReload,
     markdownToHtml,
     resolveFace,
-    deleteFolderRecursive,
-    deleteServerPath,
 } from "./ExotikDiceConfig.js";
 
-import { exportDice, autoImportDice } from "./dicePorting.js";
+import { exportDice, syncDiceFromFilesystem } from "./dicePorting.js";
 
 /* ---------------------------------------- */
 /*  Constants                                */
@@ -29,10 +27,10 @@ const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
 
 /**
  * Asset folder convention per dice:
- *   assets/dices/<dice_slug>/textures/   → 3D face textures (PNG)
- *   assets/dices/<dice_slug>/bump_maps/  → 3D bump maps (PNG)
- *   assets/dices/<dice_slug>/chat_2d/    → Chat icons (SVG/PNG)
- *   assets/geometries/                   → Shared 3D geometries (GLB)
+ *   assets/dices/<dice_slug>/textures/   -> 3D face textures (PNG)
+ *   assets/dices/<dice_slug>/bump_maps/  -> 3D bump maps (PNG)
+ *   assets/dices/<dice_slug>/chat_2d/    -> Chat icons (SVG/PNG)
+ *   assets/geometries/                   -> Shared 3D geometries (GLB)
  */
 const DICES_PATH = `${ASSETS_PATH}/dices`;
 const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
@@ -47,68 +45,11 @@ function getUserDicePath() {
     }
 }
 
-/** Default dice shipped with the module ("Come quando fuori piove") */
-const DEFAULT_DICE_PATH = `${DICES_PATH}/come_quando_fuori_piove`;
-const DEFAULT_DICE = [
-    {
-        id: "ekd-default-combat",
-        slug: "come_quando_fuori_piove",
-        name: "Come quando fuori piove",
-        denomination: "h",
-        faces: 6,
-        geometry: "rounded_d6",
-        faceMap: [
-            {
-                refFace: null,
-                label: "Cuori",
-                texture: `${DEFAULT_DICE_PATH}/textures/heart.png`,
-                bump: `${DEFAULT_DICE_PATH}/bump_maps/heart_bump.png`,
-                icon: `${DEFAULT_DICE_PATH}/chat_2d/heart.svg`,
-            },
-            {
-                refFace: 0,
-                label: "",
-                texture: "",
-                bump: "",
-                icon: "",
-            },
-            {
-                refFace: null,
-                label: "Quadri",
-                texture: `${DEFAULT_DICE_PATH}/textures/diamond.png`,
-                bump: `${DEFAULT_DICE_PATH}/bump_maps/diamond_bump.png`,
-                icon: `${DEFAULT_DICE_PATH}/chat_2d/diamond.svg`,
-            },
-            {
-                refFace: null,
-                label: "Fiori",
-                texture: `${DEFAULT_DICE_PATH}/textures/club.png`,
-                bump: `${DEFAULT_DICE_PATH}/bump_maps/club_bump.png`,
-                icon: `${DEFAULT_DICE_PATH}/chat_2d/club.svg`,
-            },
-            {
-                refFace: 3,
-                label: "",
-                texture: "",
-                bump: "",
-                icon: "",
-            },
-            {
-                refFace: null,
-                label: "Picche",
-                texture: `${DEFAULT_DICE_PATH}/textures/spade.png`,
-                bump: `${DEFAULT_DICE_PATH}/bump_maps/spade_bump.png`,
-                icon: `${DEFAULT_DICE_PATH}/chat_2d/spade.svg`,
-            },
-        ],
-    },
-];
-
 /* ---------------------------------------- */
 /*  Runtime lookup maps                      */
 /* ---------------------------------------- */
 
-/** @type {Map<string, object>}  denomination → dice definition */
+/** @type {Map<string, object>}  denomination -> dice definition */
 const _diceDefinitions = new Map();
 
 /* ---------------------------------------- */
@@ -161,7 +102,7 @@ function createDiceClass(def) {
 /*  DSN helpers                              */
 /* ---------------------------------------- */
 
-/** Map face count → DSN geometry key */
+/** Map face count -> DSN geometry key */
 function getDSNGeometryType(faces) {
     const map = { 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12", 20: "d20" };
     return map[faces] || "d6";
@@ -172,12 +113,14 @@ function getDSNGeometryType(faces) {
 /* ---------------------------------------- */
 
 function registerSettings() {
+    // DB cache of dice definitions (populated by filesystem sync).
+    // This is NOT the source of truth — the filesystem is.
     game.settings.register(MODULE_ID, "diceDefinitions", {
         name: "EKD.Settings.DiceDefinitions",
         scope: "world",
         config: false,
         type: Array,
-        default: DEFAULT_DICE,
+        default: [],
     });
 
     game.settings.register(MODULE_ID, "diceDataPath", {
@@ -195,15 +138,6 @@ function registerSettings() {
         config: false,
         type: Number,
         default: 0,
-    });
-
-    // Paths of dice.json files already imported (Foundry has no file-delete API,
-    // so we track them here to avoid re-importing).
-    game.settings.register(MODULE_ID, "importedPaths", {
-        scope: "world",
-        config: false,
-        type: Array,
-        default: [],
     });
 
     game.settings.registerMenu(MODULE_ID, "diceConfig", {
@@ -270,7 +204,7 @@ function buildChatSummary(rolls) {
             ? `<img src="${g.icon}" class="ekd-summary-icon" title="${g.label}"/>`
             : `<span>${g.label}</span>`;
         parts.push(
-            `<span class="ekd-summary-item">${iconHtml} ×${g.count}</span>`,
+            `<span class="ekd-summary-item">${iconHtml} x${g.count}</span>`,
         );
     }
 
@@ -286,11 +220,9 @@ function buildChatSummary(rolls) {
 Hooks.once("init", () => {
     registerSettings();
 
-    // Load dice definitions and register Die subclasses.
-    // In Foundry v13 CONFIG.Dice.terms uses class names as keys (e.g. "Die",
-    // "Coin"). Registration by denomination still works for some lookups, but
-    // we also register by class name so that DiceTerm.fromParseNode / fromData
-    // can find our class when reconstructing rolls from serialised chat data.
+    // Load dice definitions from DB cache (synchronous) and register
+    // Die subclasses.  The cache is kept in sync with the filesystem
+    // by syncDiceFromFilesystem() which runs in the "ready" hook.
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
 
     for (const def of definitions) {
@@ -302,7 +234,7 @@ Hooks.once("init", () => {
         CONFIG.Dice.terms[def.denomination] = DiceClass;
 
         console.log(
-            `${MODULE_ID} | Registered dice: d${def.denomination} – "${def.name}" (${def.faces} faces, class=${DiceClass.name})`,
+            `${MODULE_ID} | Registered dice: d${def.denomination} - "${def.name}" (${def.faces} faces, class=${DiceClass.name})`,
         );
     }
 });
@@ -313,52 +245,13 @@ Hooks.once("ready", () => {
         ui.notifications.warn(game.i18n.localize("EKD.DSNRequired"));
     }
 
-    // ── Migrations (versioned) ──
-    const CURRENT_SCHEMA = 2;
-    const schema = game.settings.get(MODULE_ID, "schemaVersion") || 0;
-    const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
-    let needsMigration = false;
-
-    // v1: geometry "board" → "rounded_d6"
-    if (schema < 1) {
-        for (const def of defs) {
-            if (def.geometry === "board") {
-                def.geometry = "rounded_d6";
-                needsMigration = true;
-            }
-        }
-    }
-
-    // v2: old combat dice → "Come quando fuori piove" (card suits)
-    if (schema < 2) {
-        for (let i = 0; i < defs.length; i++) {
-            const def = defs[i];
-            if (
-                def.id === "ekd-default-combat" ||
-                def.name === "Combat Dice" ||
-                (def.denomination === "h" &&
-                    def.faceMap?.[0]?.label === "Skull")
-            ) {
-                defs[i] = foundry.utils.deepClone(DEFAULT_DICE[0]);
-                needsMigration = true;
-                console.log(
-                    `${MODULE_ID} | Migrated default dice to "Come quando fuori piove"`,
-                );
-            }
-        }
-    }
-
-    if (needsMigration || schema < CURRENT_SCHEMA) {
-        if (needsMigration) {
-            game.settings.set(MODULE_ID, "diceDefinitions", defs);
-        }
-        game.settings.set(MODULE_ID, "schemaVersion", CURRENT_SCHEMA);
-        console.log(`${MODULE_ID} | Schema updated to v${CURRENT_SCHEMA}`);
-    }
-
-    // ── Auto-import dice from filesystem ──
-    autoImportDice().then((count) => {
-        if (count > 0) promptReload();
+    // ── Filesystem -> DB sync ──
+    // Scans all dice folders for dice.json files and updates the DB
+    // cache if anything changed.  Prompts reload when needed.
+    syncDiceFromFilesystem().then(({ changed }) => {
+        if (changed) promptReload();
+    }).catch((err) => {
+        console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
     });
 });
 
@@ -380,17 +273,12 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 });
 
 /* ---------------------------------------- */
-/*  Dice So Nice Integration                 */
-/* ---------------------------------------- */
-
-/* ---------------------------------------- */
-/*  Settings panel – dice list injection     */
+/*  Settings panel - dice list injection     */
 /* ---------------------------------------- */
 
 /**
  * Inject the dice list directly into the Game Settings panel
  * so users can see/manage dice without opening a separate window.
- * The Configure button is kept as a fallback.
  */
 Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     // Support both AppV1 (jQuery) and AppV2 (HTMLElement) parameter styles
@@ -489,11 +377,12 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     if (definitions.length) {
         listHtml += `<ul class="ekd-settings-list">`;
         for (const d of definitions) {
-            const isDefault = d.id === "ekd-default-combat";
-            const editBtn = isDefault
+            // Dice shipped with the module (under modules/ path) are read-only
+            const isModuleDice = d.slug && d.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`);
+            const editBtn = isModuleDice
                 ? ""
                 : `<a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>`;
-            const deleteBtn = isDefault
+            const deleteBtn = isModuleDice
                 ? ""
                 : `<a class="ekd-settings-delete" title="${t.del}"><i class="fas fa-trash"></i></a>`;
             listHtml += `
@@ -529,12 +418,6 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             const id = target.closest("[data-id]")?.dataset.id;
             const dice = definitions.find((d) => d.id === id);
             if (!dice) return;
-            if (dice.id === "ekd-default-combat") {
-                ui.notifications.warn(
-                    game.i18n.localize("EKD.Config.DefaultProtected"),
-                );
-                return;
-            }
             ExotikDiceConfig.editDice(dice, app);
         }
 
@@ -550,7 +433,8 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             const id = target.closest("[data-id]")?.dataset.id;
             const dice = definitions.find((d) => d.id === id);
             if (!dice) return;
-            if (dice.id === "ekd-default-combat") {
+            // Module-shipped dice cannot be deleted
+            if (dice.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`)) {
                 ui.notifications.warn(
                     game.i18n.localize("EKD.Config.DefaultProtected"),
                 );
@@ -558,24 +442,20 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             }
             Dialog.confirm({
                 title: game.i18n.localize("EKD.Config.Delete"),
-                content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`,
+                content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`
+                    + `<p class="notes">${game.i18n.localize("EKD.Config.DeleteFolderHint")}</p>`,
             }).then(async (confirmed) => {
                 if (!confirmed) return;
+                // Remove from DB cache (filesystem folder must be removed
+                // manually by the user — Foundry has no file-delete API)
                 const updated = (
                     game.settings.get(MODULE_ID, "diceDefinitions") || []
                 ).filter((d) => d.id !== id);
                 await game.settings.set(MODULE_ID, "diceDefinitions", updated);
-                // Remove the dice asset folder
-                if (dice.slug) {
-                    const possiblePaths = [
-                        `${getUserDicePath()}/${dice.slug}`,
-                        `${DICES_PATH}/${dice.slug}`,
-                    ];
-                    console.log(`${MODULE_ID} | Attempting to delete folders for slug "${dice.slug}":`, possiblePaths);
-                    for (const folderPath of possiblePaths) {
-                        await deleteFolderRecursive(folderPath);
-                    }
-                }
+                console.log(
+                    `${MODULE_ID} | Dice "${dice.name}" removed from cache` +
+                    (dice.slug ? ` (remove folder "${dice.slug}" to complete deletion)` : ""),
+                );
                 app.render(true);
                 promptReload();
             });
@@ -588,9 +468,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 
         if (target.closest(".ekd-settings-refresh")) {
             event.preventDefault();
-            autoImportDice().then((count) => {
+            syncDiceFromFilesystem().then(({ changed }) => {
                 app.render(true);
-                if (count > 0) {
+                if (changed) {
                     promptReload();
                 } else {
                     ui.notifications.info(
@@ -598,8 +478,8 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     );
                 }
             }).catch((err) => {
-                console.error(`${MODULE_ID} | autoImportDice error:`, err);
-                ui.notifications.error("Auto-import failed – see console.");
+                console.error(`${MODULE_ID} | sync error:`, err);
+                ui.notifications.error("Sync failed - see console.");
             });
         }
 
@@ -609,7 +489,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                 .then((r) => r.text())
                 .then((md) => {
                     new Dialog({
-                        title: "Exotik Dices – README",
+                        title: "Exotik Dices - README",
                         content: `<div class="ekd-readme" style="max-height:500px;overflow:auto;padding:4px 8px;">${markdownToHtml(md)}</div>`,
                         buttons: { ok: { label: "OK" } },
                         default: "ok",
@@ -658,23 +538,23 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     }
 });
 
+/* ---------------------------------------- */
+/*  Dice So Nice Integration                 */
+/* ---------------------------------------- */
+
 Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
     // Register "Exotik Dices" as a selectable system in DSN dropdown.
-    // Not set as default — users opt-in by selecting it.
     dice3d.addSystem({ id: "ekd", name: "Exotik Dices" }, false);
 
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     const factory = dice3d.DiceFactory;
 
-    // Set of dice types we own (e.g. "dh", "dc") – used by the create patch.
+    // Set of dice types we own (e.g. "dh", "dc") - used by the create patch.
     const ekdDiceTypes = new Set();
 
-    // ── Register DSN presets ──
-    // We create DicePreset objects manually instead of using dice3d.addDicePreset()
-    // because that method crashes on custom denominations not registered in
-    // CONFIG.Dice.terms (it tries CONFIG.Dice.terms[denominator].name).
+    // ── Register DSN presets via official API ──
     for (const def of definitions) {
         const labels = def.faceMap.map((_, i) => {
             const r = resolveFace(def.faceMap, i);
@@ -688,44 +568,24 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
         const diceType = `d${def.denomination}`;
 
         try {
-            // Get the standard model for this geometric shape
-            const standardModel = factory.systems
-                .get("standard")
-                .dice.get(dsnGeo);
-            if (!standardModel) {
-                console.warn(
-                    `${MODULE_ID} | No standard model for ${dsnGeo}, skipping ${diceType}`,
-                );
-                continue;
+            // Use dice3d.addDicePreset() — the official DSN API.
+            // The second parameter is the fallback base type (e.g. "d6")
+            // used to determine the physical shape when our custom type
+            // isn't in the standard set.
+            const presetData = {
+                type: diceType,
+                labels,
+                system: "ekd",
+            };
+            if (bumpMaps.some((b) => b)) {
+                presetData.bumpMaps = bumpMaps;
             }
 
-            const DicePreset = standardModel.constructor;
-            const preset = new DicePreset(diceType, standardModel.shape);
-            preset.term = "Die";
-            preset.setLabels(labels);
-            if (bumpMaps.some((b) => b)) preset.setBumpMaps(bumpMaps);
-            preset.values = standardModel.values;
-            preset.valueMap = standardModel.valueMap;
-            preset.mass = standardModel.mass;
-            preset.scale = standardModel.scale;
-            preset.inertia = standardModel.inertia;
-            preset.system = "ekd";
-
-            // Register ONLY in the "ekd" system.
-            // The monkey-patch below forces DSN to use "ekd" for our dice
-            // types at render time, so they always display correctly.
-            factory.systems.get("ekd").dice.set(diceType, preset);
-
-            // Remove auto-generated default presets from all other systems
-            // so our dice don't appear in their preset lists.
-            for (const [sysId, sys] of factory.systems) {
-                if (sysId === "ekd") continue;
-                sys.dice.delete(diceType);
-            }
+            dice3d.addDicePreset(presetData, dsnGeo);
 
             ekdDiceTypes.add(diceType);
             console.log(
-                `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo} (ekd only)`,
+                `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo} (system: ekd)`,
             );
         } catch (err) {
             console.warn(
@@ -764,7 +624,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             (geoName) =>
                 new Promise((resolve) => {
                     const glbPath = customGeoFiles.get(geoName);
-                    dice3d.DiceFactory.loaderGLTF.load(glbPath, (gltf) => {
+                    factory.loaderGLTF.load(glbPath, (gltf) => {
                         let geometry = null;
                         gltf.scene.traverse((child) => {
                             if (child.isMesh && !geometry)
@@ -783,7 +643,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
         await Promise.all(loadPromises);
     }
 
-    // Build denomination → geometry map
+    // Build denomination -> geometry map
     const denomToGeo = new Map();
     for (const def of customGeoUsers) {
         const geo = loadedGeometries.get(def.geometry);
@@ -791,14 +651,13 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     }
 
     // ── Monkey-patch DiceFactory.create ──
-    // Two responsibilities:
-    //  1. Force appearance.system → "ekd" for our dice types so DSN always
-    //     uses our custom textures/labels, regardless of the system the user
-    //     has selected in DSN settings.
-    //  2. Swap geometry for dice that use custom GLB models.
+    // Only needed for geometry swap now. addDicePreset() handles the
+    // system registration, so we no longer need to force system override.
+    // However, we still force system="ekd" at render time to ensure our
+    // textures are always used regardless of user's selected DSN system.
     if (ekdDiceTypes.size > 0 || denomToGeo.size > 0) {
-        const origCreate = dice3d.DiceFactory.create.bind(dice3d.DiceFactory);
-        dice3d.DiceFactory.create = async function (t, i, r) {
+        const origCreate = factory.create.bind(factory);
+        factory.create = async function (t, i, r) {
             // Force our dice to resolve from the "ekd" system
             if (ekdDiceTypes.has(i) && r) {
                 r = Object.assign({}, r, { system: "ekd" });
@@ -806,7 +665,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
 
             const mesh = await origCreate(t, i, r);
 
-            // Geometry swap
+            // Geometry swap for custom GLB models
             const customGeo = denomToGeo.get(i);
             if (customGeo && mesh) {
                 const baseScale = t.type === "board" ? this.baseScale : 60;
@@ -825,8 +684,9 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
         };
 
         console.log(
-            `${MODULE_ID} | DiceFactory.create patched – system override: [${[...ekdDiceTypes].join(", ")}]` +
-            (denomToGeo.size ? `, geometry swap: [${[...denomToGeo.keys()].join(", ")}]` : ""),
+            `${MODULE_ID} | DiceFactory.create patched` +
+            (ekdDiceTypes.size ? ` - system override: [${[...ekdDiceTypes].join(", ")}]` : "") +
+            (denomToGeo.size ? ` - geometry swap: [${[...denomToGeo.keys()].join(", ")}]` : ""),
         );
     }
 });

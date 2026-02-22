@@ -1,13 +1,19 @@
 /**
- * Exotik Dices – Import / Export helpers.
+ * Exotik Dices – Filesystem sync & Export helpers.
  *
- * Export: builds a ZIP in memory (dice.json + asset files) and triggers
- *         a browser download.
+ * The filesystem is the **single source of truth** for dice definitions.
+ * Each dice lives in its own folder and contains a `dice.json` file.
  *
- * Import: at startup, scans the dices folder looking for sub-folders that
- *         do NOT have a matching entry in the DB. If a folder contains a
- *         dice.json it is imported automatically and the file is removed
- *         (best-effort deletion, non-blocking).
+ * On startup (`syncDiceFromFilesystem`) the module scans all dice folders,
+ * reads every `dice.json`, and compares the result with the DB cache
+ * (`diceDefinitions` setting).  If anything changed the cache is updated
+ * and a world-reload is requested so that CONFIG.Dice.terms can be
+ * re-registered.
+ *
+ * Export builds a portable ZIP of the dice folder (dice.json + assets).
+ *
+ * `writeDiceJson` uploads a fresh dice.json into a dice folder via
+ * FilePicker.upload so the editor can persist changes.
  */
 
 import { zipSync } from "./vendor/fflate.min.js";
@@ -17,6 +23,7 @@ const MODULE_ID = "exotik-dices";
 /** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
 const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
 
+/** Module-shipped default dice path. */
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
 const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
 
@@ -38,7 +45,7 @@ function getUserDicePath() {
 
 /**
  * Recursively collect all file paths under a given folder via FilePicker.
- * @param {string} dir  Server-relative path (e.g. "modules/exotik-dices/assets/dices/foo")
+ * @param {string} dir  Server-relative path
  * @returns {Promise<string[]>}
  */
 async function collectFiles(dir) {
@@ -59,10 +66,7 @@ async function collectFiles(dir) {
  *   <slug>/bump_maps/...
  *   <slug>/chat_2d/...
  *
- * Any old dice.json on disk is **excluded**; the freshly-generated one
- * is always used.
- *
- * @param {object} diceDef   The dice definition object (from DB)
+ * @param {object} diceDef   The dice definition object
  */
 export async function exportDice(diceDef) {
     const slug = diceDef.slug;
@@ -79,9 +83,9 @@ export async function exportDice(diceDef) {
     } catch {
         basePath = `${DICES_PATH}/${slug}`;
     }
-    const prefixLen = basePath.length + 1; // strip up to and including the trailing /
+    const prefixLen = basePath.length + 1;
 
-    // --- Collect all files from the dice folder ---
+    // Collect all files from the dice folder
     let allFiles;
     try {
         allFiles = await collectFiles(basePath);
@@ -96,18 +100,16 @@ export async function exportDice(diceDef) {
         return;
     }
 
-    // Filter out any dice.json already on disk
+    // Filter out any dice.json already on disk (we generate a fresh one)
     const assetFiles = allFiles.filter(
         (f) => !f.endsWith("/dice.json") && !f.endsWith("\\dice.json"),
     );
 
-    // --- Build the fflate input object ---
-    // { "<slug>/dice.json": Uint8Array, "<slug>/textures/foo.png": Uint8Array, ... }
+    // Build the fflate input object
     const zipInput = {};
 
-    // 1. Fresh dice.json from the definition (make paths relative)
+    // 1. Fresh dice.json with relative paths
     const exportDef = foundry.utils.deepClone(diceDef);
-    // Store relative paths so the ZIP is portable
     for (const face of exportDef.faceMap || []) {
         for (const key of ["texture", "bump", "icon"]) {
             if (face[key] && face[key].startsWith(basePath)) {
@@ -120,7 +122,7 @@ export async function exportDice(diceDef) {
     );
     zipInput[`${slug}/dice.json`] = jsonBytes;
 
-    // 2. Asset files (download each into Uint8Array)
+    // 2. Asset files
     const fetchPromises = assetFiles.map(async (filePath) => {
         try {
             const resp = await fetch(filePath);
@@ -154,17 +156,99 @@ export async function exportDice(diceDef) {
 }
 
 /* ──────────────────────────────────────────── */
-/*  Import (auto-discovery at startup)           */
+/*  Write dice.json                              */
 /* ──────────────────────────────────────────── */
 
 /**
- * Scan the dices folder for sub-folders that contain a dice.json but
- * are not yet in the DB.  Import those dice definitions automatically.
+ * Write (or overwrite) a dice.json file inside a dice folder.
  *
- * @returns {Promise<number>}  Number of dice imported
+ * Paths in faceMap are converted to relative (relative to the dice folder)
+ * before writing, so the result is portable.
+ *
+ * @param {object} diceDef   The dice definition (with absolute paths)
+ * @param {string} basePath  The dice folder  e.g. "exotik-dices/dices/my_slug"
  */
-export async function autoImportDice() {
-    // Scan both module assets and user data folders
+export async function writeDiceJson(diceDef, basePath) {
+    const exportDef = foundry.utils.deepClone(diceDef);
+
+    // Convert absolute paths to relative
+    const prefix = basePath.endsWith("/") ? basePath : basePath + "/";
+    for (const face of exportDef.faceMap || []) {
+        for (const key of ["texture", "bump", "icon"]) {
+            if (face[key] && face[key].startsWith(prefix)) {
+                face[key] = face[key].slice(prefix.length);
+            }
+        }
+    }
+
+    const jsonStr = JSON.stringify(exportDef, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const file = new File([blob], "dice.json", { type: "application/json" });
+
+    try {
+        await FP.upload("data", basePath, file, {});
+        console.log(`${MODULE_ID} | dice.json written to ${basePath}`);
+    } catch (err) {
+        console.error(`${MODULE_ID} | Failed to write dice.json to ${basePath}:`, err);
+        throw err;
+    }
+}
+
+/* ──────────────────────────────────────────── */
+/*  Filesystem -> DB sync                        */
+/* ──────────────────────────────────────────── */
+
+/**
+ * Read a dice.json from disk, resolving relative paths to absolute.
+ *
+ * @param {string} jsonPath  Full server path to the dice.json file
+ * @param {string} folderPath  The parent folder path
+ * @returns {Promise<object|null>}  Parsed definition or null
+ */
+async function readDiceJson(jsonPath, folderPath) {
+    try {
+        const resp = await fetch(jsonPath);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const def = await resp.json();
+
+        if (!def.name || !def.denomination || !def.faceMap) {
+            console.warn(`${MODULE_ID} | Invalid dice.json in ${folderPath}`);
+            return null;
+        }
+
+        // Resolve relative asset paths to absolute
+        const prefix = folderPath.endsWith("/") ? folderPath : folderPath + "/";
+        for (const face of def.faceMap || []) {
+            for (const key of ["texture", "bump", "icon"]) {
+                if (
+                    face[key] &&
+                    !face[key].startsWith("modules/") &&
+                    !face[key].startsWith(MODULE_ID)
+                ) {
+                    face[key] = prefix + face[key];
+                }
+            }
+        }
+
+        // Ensure slug matches folder name
+        def.slug = folderPath.split("/").pop();
+
+        return def;
+    } catch (e) {
+        console.warn(`${MODULE_ID} | Could not read ${jsonPath}:`, e);
+        return null;
+    }
+}
+
+/**
+ * Scan all dice folders, read their dice.json files, and compare with the
+ * DB cache.  If anything changed, update the cache.
+ *
+ * @returns {Promise<{changed: boolean, definitions: object[]}>}
+ *   `changed` is true when the DB was updated (caller should prompt reload).
+ *   `definitions` is the up-to-date array of dice definitions.
+ */
+export async function syncDiceFromFilesystem() {
     const dirsToScan = [DICES_PATH, getUserDicePath()];
     const allSubDirs = [];
 
@@ -175,30 +259,15 @@ export async function autoImportDice() {
                 allSubDirs.push(dir);
             }
         } catch {
-            // Folder doesn't exist – skip
+            // Folder doesn't exist yet - skip
         }
     }
 
-    if (allSubDirs.length === 0) return 0;
-
-    const currentDefs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
-    const knownSlugs = new Set(currentDefs.map((d) => d.slug).filter(Boolean));
-    const knownIds = new Set(currentDefs.map((d) => d.id).filter(Boolean));
-
-    // Paths already imported in a previous session (Foundry has no file-delete
-    // API, so dice.json files remain on disk and we skip them here).
-    const importedPaths = new Set(
-        game.settings.get(MODULE_ID, "importedPaths") || [],
-    );
-
-    let imported = 0;
+    // Read every dice.json found on disk
+    /** @type {Map<string, object>}  slug -> definition */
+    const fsDefinitions = new Map();
 
     for (const dir of allSubDirs) {
-        // dir looks like "exotik-dices/dices/some_slug" or "modules/exotik-dices/assets/dices/some_slug"
-        const slug = dir.split("/").pop();
-        if (knownSlugs.has(slug)) continue; // already in DB
-
-        // Look for dice.json in this folder
         let folderResult;
         try {
             folderResult = await FP.browse("data", dir);
@@ -211,89 +280,86 @@ export async function autoImportDice() {
         );
         if (!diceJsonPath) continue;
 
-        // Skip if already imported in a previous session
-        if (importedPaths.has(diceJsonPath)) continue;
+        const def = await readDiceJson(diceJsonPath, dir);
+        if (!def) continue;
 
-        // Read and parse dice.json
-        let diceDef;
-        try {
-            const resp = await fetch(diceJsonPath);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            diceDef = await resp.json();
-        } catch (e) {
-            console.warn(
-                `${MODULE_ID} | autoImport: could not read ${diceJsonPath}`,
-                e,
-            );
-            continue;
-        }
-
-        // Validate minimum required fields
-        if (!diceDef.name || !diceDef.denomination || !diceDef.faceMap) {
-            console.warn(
-                `${MODULE_ID} | autoImport: invalid dice.json in ${dir}`,
-            );
-            continue;
-        }
-
-        // Resolve relative paths → full module paths
-        const basePath = dir;
-        for (const face of diceDef.faceMap || []) {
-            for (const key of ["texture", "bump", "icon"]) {
-                if (face[key] && !face[key].includes("/")) {
-                    // bare filename → impossible, skip
-                } else if (face[key] && !face[key].startsWith("modules/")) {
-                    face[key] = `${basePath}/${face[key]}`;
-                }
-            }
-        }
-
-        // Ensure unique id
-        if (!diceDef.id || knownIds.has(diceDef.id)) {
-            diceDef.id = foundry.utils.randomID();
-        }
-        diceDef.slug = slug;
-
-        // Check denomination conflict
-        const denomConflict = currentDefs.find(
-            (d) => d.denomination === diceDef.denomination,
+        // Check for denomination conflicts between FS dice
+        const conflicting = [...fsDefinitions.values()].find(
+            (d) => d.denomination === def.denomination && d.slug !== def.slug,
         );
-        if (denomConflict) {
+        if (conflicting) {
             console.warn(
-                `${MODULE_ID} | autoImport: denomination "${diceDef.denomination}" conflicts with "${denomConflict.name}", skipping ${slug}`,
+                `${MODULE_ID} | sync: denomination "${def.denomination}" conflict between ` +
+                `"${def.name}" and "${conflicting.name}", skipping ${def.slug}`,
             );
             ui.notifications.warn(
                 game.i18n.format("EKD.Import.DenomConflict", {
-                    name: diceDef.name,
-                    denom: diceDef.denomination,
-                    existing: denomConflict.name,
+                    name: def.name,
+                    denom: def.denomination,
+                    existing: conflicting.name,
                 }),
             );
             continue;
         }
 
-        // Add to definitions
-        currentDefs.push(diceDef);
-        knownSlugs.add(slug);
-        knownIds.add(diceDef.id);
-        imported++;
+        fsDefinitions.set(def.slug, def);
+    }
 
+    // Compare with DB cache
+    const cachedDefs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+    const cachedMap = new Map(
+        cachedDefs.filter((d) => d.slug).map((d) => [d.slug, d]),
+    );
+
+    // Detect changes
+    let changed = false;
+
+    // 1. Check for additions / modifications
+    for (const [slug, fsDef] of fsDefinitions) {
+        const cached = cachedMap.get(slug);
+        if (!cached) {
+            // New dice from filesystem
+            if (!fsDef.id) fsDef.id = foundry.utils.randomID();
+            console.log(`${MODULE_ID} | sync: new dice "${fsDef.name}" from ${slug}/`);
+            changed = true;
+        } else {
+            // Preserve the DB id
+            fsDef.id = cached.id;
+            // Check if definition changed
+            if (JSON.stringify(cached) !== JSON.stringify(fsDef)) {
+                console.log(`${MODULE_ID} | sync: updated dice "${fsDef.name}" from ${slug}/`);
+                changed = true;
+            }
+        }
+    }
+
+    // 2. Check for removals (in cache but not on filesystem)
+    for (const [slug, cached] of cachedMap) {
+        if (!fsDefinitions.has(slug)) {
+            console.log(`${MODULE_ID} | sync: dice "${cached.name}" removed (folder ${slug}/ no longer exists)`);
+            changed = true;
+        }
+    }
+
+    // Update DB cache if anything changed
+    if (changed) {
+        const newDefs = [...fsDefinitions.values()];
+        // Ensure every definition has an id
+        for (const d of newDefs) {
+            if (!d.id) d.id = foundry.utils.randomID();
+        }
+        await game.settings.set(MODULE_ID, "diceDefinitions", newDefs);
         console.log(
-            `${MODULE_ID} | autoImport: imported "${diceDef.name}" from ${slug}/dice.json`,
+            `${MODULE_ID} | sync: DB cache updated - ${newDefs.length} dice definition(s)`,
         );
-
-        // Mark as imported so it won't be re-imported on next startup
-        importedPaths.add(diceJsonPath);
-    }
-
-    if (imported > 0) {
-        await game.settings.set(MODULE_ID, "diceDefinitions", currentDefs);
-        // Persist the list of already-imported dice.json paths
-        await game.settings.set(MODULE_ID, "importedPaths", [...importedPaths]);
-        ui.notifications.info(
-            game.i18n.format("EKD.Import.Success", { count: imported }),
+    } else {
+        console.log(
+            `${MODULE_ID} | sync: filesystem and DB cache are in sync (${fsDefinitions.size} dice)`,
         );
     }
 
-    return imported;
+    return {
+        changed,
+        definitions: [...fsDefinitions.values()],
+    };
 }

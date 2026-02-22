@@ -1,0 +1,52 @@
+{
+  "id": "ekd-default-combat",
+  "name": "Come quando fuori piove",
+  "slug": "come_quando_fuori_piove",
+  "denomination": "h",
+  "faces": 6,
+  "geometry": "rounded_d6",
+  "faceMap": [
+    {
+      "refFace": null,
+      "label": "Cuori",
+      "texture": "textures/heart.png",
+      "bump": "bump_maps/heart_bump.png",
+      "icon": "chat_2d/heart.svg"
+    },
+    {
+      "refFace": 0,
+      "label": "",
+      "texture": "",
+      "bump": "",
+      "icon": ""
+    },
+    {
+      "refFace": null,
+      "label": "Quadri",
+      "texture": "textures/diamond.png",
+      "bump": "bump_maps/diamond_bump.png",
+      "icon": "chat_2d/diamond.svg"
+    },
+    {
+      "refFace": null,
+      "label": "Fiori",
+      "texture": "textures/club.png",
+      "bump": "bump_maps/club_bump.png",
+      "icon": "chat_2d/club.svg"
+    },
+    {
+      "refFace": 3,
+      "label": "",
+      "texture": "",
+      "bump": "",
+      "icon": ""
+    },
+    {
+      "refFace": null,
+      "label": "Picche",
+      "texture": "textures/spade.png",
+      "bump": "bump_maps/spade_bump.png",
+      "icon": "chat_2d/spade.svg"
+    }
+  ]
+}

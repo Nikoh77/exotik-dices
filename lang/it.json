@@ -22,6 +22,7 @@
             "Edit": "Modifica",
             "Delete": "Elimina",
             "DeleteConfirm": "Sei sicuro di voler eliminare \"{name}\"?",
+            "DeleteFolderHint": "La cartella del dado resterà su disco. Rimuovila manualmente per completare l'eliminazione.",
             "DiceSaved": "Dado \"{name}\" salvato.",
             "ReloadRequired": "Ricaricamento Necessario",
             "ReloadRequiredMsg": "La configurazione dei dadi è cambiata. È necessario ricaricare il mondo per applicare le modifiche.",
@@ -40,9 +41,9 @@
         },
 
         "Import": {
-            "Success": "{count} dado/i importato/i dal filesystem.",
-            "NoneFound": "Nessun nuovo dado trovato da importare.",
-            "DenomConflict": "Impossibile importare \"{name}\": la denominazione \"{denom}\" \u00e8 gi\u00e0 usata da \"{existing}\"."
+            "Success": "{count} dado/i sincronizzato/i dal filesystem.",
+            "NoneFound": "Filesystem e cache sono sincronizzati. Nessuna modifica rilevata.",
+            "DenomConflict": "Impossibile caricare \"{name}\": la denominazione \"{denom}\" è già usata da \"{existing}\"."
         },
 
         "Editor": {
@@ -78,7 +79,8 @@
             "DenominationLength": "La denominazione deve essere esattamente un carattere.",
             "DenominationReserved": "La denominazione \"{denom}\" è riservata da Foundry VTT o da un altro modulo.",
             "DenominationConflict": "La denominazione \"{denom}\" è già usata da \"{name}\".",
-            "FaceRefLoop": "Rilevato loop nei riferimenti delle facce. Correggi i riferimenti circolari."
+            "FaceRefLoop": "Rilevato loop nei riferimenti delle facce. Correggi i riferimenti circolari.",
+            "SaveFailed": "Impossibile scrivere dice.json su disco."
         }
     }
 }
