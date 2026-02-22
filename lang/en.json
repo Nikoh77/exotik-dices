@@ -25,7 +25,19 @@
             "ReloadNow": "Reload Now",
             "ReloadLater": "Later",
             "README": "README",
-            "HintNote": "Note: this module creates symbol dice only (not standard numbered dice, for which Dice So Nice already works great). Results are grouped by type, e.g. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660."
+            "HintNote": "Note: this module creates symbol dice only (not standard numbered dice, for which Dice So Nice already works great). Results are grouped by type, e.g. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660.",
+            "Export": "Export",
+            "Refresh": "Refresh dice"
+        },
+
+        "Export": {
+            "Success": "Dice \"{name}\" exported successfully.",
+            "FolderError": "Cannot browse the asset folder for \"{name}\". Make sure the dice has been saved."
+        },
+
+        "Import": {
+            "Success": "{count} dice(s) imported from filesystem.",
+            "DenomConflict": "Cannot import \"{name}\": denomination \"{denom}\" is already used by \"{existing}\"."
         },
 
         "Editor": {
@@ -38,9 +50,7 @@
             "DenominationHint": "Single character used in roll formulas (e.g. 'h' → /r 1dh). Must be unique.",
             "Faces": "Faces",
             "Geometry": "Geometry",
-            "GeometryHint": "3D geometry style. 'Board Game Classic' uses rounded corners (d6 only).",
             "GeometryStandard": "Standard (DSN)",
-            "GeometryBoard": "Board Game Classic (Rounded)",
             "FaceConfig": "Face Configuration",
             "Face": "Face",
             "FaceLabel": "Label",

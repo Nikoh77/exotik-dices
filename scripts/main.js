@@ -13,6 +13,8 @@ import {
     resolveFace,
 } from "./ExotikDiceConfig.js";
 
+import { exportDice, autoImportDice } from "./dicePorting.js";
+
 /* ---------------------------------------- */
 /*  Constants                                */
 /* ---------------------------------------- */
@@ -35,6 +37,7 @@ const DEFAULT_DICE_PATH = `${DICES_PATH}/come_quando_fuori_piove`;
 const DEFAULT_DICE = [
     {
         id: "ekd-default-combat",
+        slug: "come_quando_fuori_piove",
         name: "Come quando fuori piove",
         denomination: "h",
         faces: 6,
@@ -92,9 +95,6 @@ const DEFAULT_DICE = [
 
 /** @type {Map<string, object>}  denomination → dice definition */
 const _diceDefinitions = new Map();
-
-/** @type {Map<string, typeof foundry.dice.terms.Die>}  denomination → dice subclass */
-const _diceClasses = new Map();
 
 /* ---------------------------------------- */
 /*  Dynamic Dice Class Factory               */
@@ -163,6 +163,14 @@ function registerSettings() {
         config: false,
         type: Array,
         default: DEFAULT_DICE,
+    });
+
+    game.settings.register(MODULE_ID, "schemaVersion", {
+        name: "Schema Version",
+        scope: "world",
+        config: false,
+        type: Number,
+        default: 0,
     });
 
     game.settings.registerMenu(MODULE_ID, "diceConfig", {
@@ -249,7 +257,6 @@ Hooks.once("init", () => {
     for (const def of definitions) {
         _diceDefinitions.set(def.denomination, def);
         const DiceClass = createDiceClass(def);
-        _diceClasses.set(def.denomination, DiceClass);
         CONFIG.Dice.terms[def.denomination] = DiceClass;
         console.log(
             `${MODULE_ID} | Registered dice: d${def.denomination} – "${def.name}" (${def.faces} faces)`,
@@ -263,26 +270,53 @@ Hooks.once("ready", () => {
         ui.notifications.warn(game.i18n.localize("EKD.DSNRequired"));
     }
 
-    // Migrations
+    // ── Migrations (versioned) ──
+    const CURRENT_SCHEMA = 2;
+    const schema = game.settings.get(MODULE_ID, "schemaVersion") || 0;
     const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     let needsMigration = false;
 
-    for (const def of defs) {
-        // Migration: "board" → "rounded_d6"
-        if (def.geometry === "board") {
-            def.geometry = "rounded_d6";
-            needsMigration = true;
-        }
-        // Migration: old combat dice → card suit dice
-        if (def.id === "ekd-default-combat" && def.slug === "combat_dice") {
-            Object.assign(def, DEFAULT_DICE[0]);
-            needsMigration = true;
+    // v1: geometry "board" → "rounded_d6"
+    if (schema < 1) {
+        for (const def of defs) {
+            if (def.geometry === "board") {
+                def.geometry = "rounded_d6";
+                needsMigration = true;
+            }
         }
     }
-    if (needsMigration) {
-        game.settings.set(MODULE_ID, "diceDefinitions", defs);
-        console.log(`${MODULE_ID} | Migrated dice definitions`);
+
+    // v2: old combat dice → "Come quando fuori piove" (card suits)
+    if (schema < 2) {
+        for (let i = 0; i < defs.length; i++) {
+            const def = defs[i];
+            if (
+                def.id === "ekd-default-combat" ||
+                def.name === "Combat Dice" ||
+                (def.denomination === "h" &&
+                    def.faceMap?.[0]?.label === "Skull")
+            ) {
+                defs[i] = foundry.utils.deepClone(DEFAULT_DICE[0]);
+                needsMigration = true;
+                console.log(
+                    `${MODULE_ID} | Migrated default dice to "Come quando fuori piove"`,
+                );
+            }
+        }
     }
+
+    if (needsMigration || schema < CURRENT_SCHEMA) {
+        if (needsMigration) {
+            game.settings.set(MODULE_ID, "diceDefinitions", defs);
+        }
+        game.settings.set(MODULE_ID, "schemaVersion", CURRENT_SCHEMA);
+        console.log(`${MODULE_ID} | Schema updated to v${CURRENT_SCHEMA}`);
+    }
+
+    // ── Auto-import dice from filesystem ──
+    autoImportDice().then((count) => {
+        if (count > 0) promptReload();
+    });
 });
 
 /* ---------------------------------------- */
@@ -369,8 +403,10 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         hint: game.i18n.localize("EKD.Config.Hint"),
         hintNote: game.i18n.localize("EKD.Config.HintNote"),
         addDice: game.i18n.localize("EKD.Config.AddDice"),
+        refresh: game.i18n.localize("EKD.Config.Refresh"),
         edit: game.i18n.localize("EKD.Config.Edit"),
         del: game.i18n.localize("EKD.Config.Delete"),
+        exp: game.i18n.localize("EKD.Config.Export"),
         faces: game.i18n.localize("EKD.Config.FacesLabel"),
         noDice: game.i18n.localize("EKD.Config.NoDice"),
         readme: game.i18n.localize("EKD.Config.README"),
@@ -392,6 +428,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             <button type="button" class="ekd-settings-add">
                 <i class="fas fa-plus"></i> ${t.addDice}
             </button>
+            <button type="button" class="ekd-settings-refresh">
+                <i class="fas fa-sync-alt"></i> ${t.refresh}
+            </button>
         </div>`;
     if (definitions.length) {
         listHtml += `<ul class="ekd-settings-list">`;
@@ -402,6 +441,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     <span class="ekd-settings-denom flex0">d${d.denomination}</span>
                     <span class="ekd-settings-faces flex0">${d.faces} ${t.faces}</span>
                     <span class="ekd-settings-controls flex0">
+                        <a class="ekd-settings-export" title="${t.exp}"><i class="fas fa-file-export"></i></a>
                         <a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>
                         <a class="ekd-settings-delete" title="${t.del}"><i class="fas fa-trash"></i></a>
                     </span>
@@ -430,6 +470,13 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             if (dice) ExotikDiceConfig.editDice(dice, app);
         }
 
+        if (target.closest(".ekd-settings-export")) {
+            event.preventDefault();
+            const id = target.closest("[data-id]")?.dataset.id;
+            const dice = definitions.find((d) => d.id === id);
+            if (dice) exportDice(dice);
+        }
+
         if (target.closest(".ekd-settings-delete")) {
             event.preventDefault();
             const id = target.closest("[data-id]")?.dataset.id;
@@ -456,6 +503,14 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         if (target.closest(".ekd-settings-add")) {
             event.preventDefault();
             ExotikDiceConfig.editDice(null, app);
+        }
+
+        if (target.closest(".ekd-settings-refresh")) {
+            event.preventDefault();
+            autoImportDice().then((count) => {
+                app.render(true);
+                if (count > 0) promptReload();
+            });
         }
 
         if (target.closest(".ekd-settings-help")) {

@@ -61,6 +61,7 @@ __pycache__/
 # Module specific
 # ───────────────────────────────────────────
 tools/
+!scripts/vendor/fflate.min.js
 assets/dices/*/
 !assets/dices/come_quando_fuori_piove/
 !assets/dices/come_quando_fuori_piove/**

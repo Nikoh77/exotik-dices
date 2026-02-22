@@ -25,7 +25,19 @@
             "ReloadNow": "Ricarica Ora",
             "ReloadLater": "Dopo",
             "README": "README",
-            "HintNote": "Attenzione: con questo modulo non \u00e8 possibile creare dadi standard a numerazione (per cui esiste gi\u00e0 l\u2019ottimo Dice So Nice), ma solo dadi con simboli. I risultati vengono raggruppati per tipo, ad es. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660."
+            "HintNote": "Attenzione: con questo modulo non \u00e8 possibile creare dadi standard a numerazione (per cui esiste gi\u00e0 l\u2019ottimo Dice So Nice), ma solo dadi con simboli. I risultati vengono raggruppati per tipo, ad es. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660.",
+            "Export": "Esporta",
+            "Refresh": "Aggiorna dadi"
+        },
+
+        "Export": {
+            "Success": "Dado \"{name}\" esportato con successo.",
+            "FolderError": "Impossibile sfogliare la cartella asset per \"{name}\". Assicurati che il dado sia stato salvato."
+        },
+
+        "Import": {
+            "Success": "{count} dado/i importato/i dal filesystem.",
+            "DenomConflict": "Impossibile importare \"{name}\": la denominazione \"{denom}\" \u00e8 gi\u00e0 usata da \"{existing}\"."
         },
 
         "Editor": {
@@ -38,9 +50,7 @@
             "DenominationHint": "Singolo carattere usato nelle formule di tiro (es. 'h' → /r 1dh). Deve essere unico.",
             "Faces": "Facce",
             "Geometry": "Geometria",
-            "GeometryHint": "Stile della geometria 3D. 'Board Game Classic' usa angoli arrotondati (solo d6).",
             "GeometryStandard": "Standard (DSN)",
-            "GeometryBoard": "Board Game Classic (Arrotondato)",
             "FaceConfig": "Configurazione Facce",
             "Face": "Faccia",
             "FaceLabel": "Etichetta",

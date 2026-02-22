@@ -59,31 +59,37 @@
 }
 
 /* ============================================= */
-/*  Configuration list (ExotikDiceConfig)        */
+/*  Shared dice list styles                      */
+/*  (used by both ExotikDiceConfig & settings)   */
 /* ============================================= */
 
-.ekd-config .ekd-dice-list {
+.ekd-config .ekd-dice-list,
+.ekd-settings-dice .ekd-settings-list {
     list-style: none;
     margin: 0;
     padding: 0;
 }
 
-.ekd-config .ekd-dice-entry {
+.ekd-config .ekd-dice-entry,
+.ekd-settings-entry {
     padding: 4px 6px;
     border-bottom: 1px solid var(--color-border-light-tertiary, #ccc);
     align-items: center;
     gap: 8px;
 }
 
-.ekd-config .ekd-dice-entry:last-child {
+.ekd-config .ekd-dice-entry:last-child,
+.ekd-settings-entry:last-child {
     border-bottom: none;
 }
 
-.ekd-config .ekd-dice-name {
+.ekd-config .ekd-dice-name,
+.ekd-settings-name {
     font-weight: bold;
 }
 
-.ekd-config .ekd-dice-denom {
+.ekd-config .ekd-dice-denom,
+.ekd-settings-denom {
     font-family: monospace;
     color: #fff;
     background: #4a4a4a;
@@ -96,28 +102,38 @@
     letter-spacing: 0.5px;
 }
 
-.ekd-config .ekd-dice-controls {
+.ekd-settings-faces {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.ekd-config .ekd-dice-controls,
+.ekd-settings-controls {
     display: flex;
     gap: 6px;
 }
 
-.ekd-config .ekd-dice-controls a {
+.ekd-config .ekd-dice-controls a,
+.ekd-settings-controls a {
     cursor: pointer;
     opacity: 0.7;
 }
 
-.ekd-config .ekd-dice-controls a:hover {
+.ekd-config .ekd-dice-controls a:hover,
+.ekd-settings-controls a:hover {
     opacity: 1;
 }
 
-.ekd-config .ekd-no-dice {
+.ekd-config .ekd-no-dice,
+.ekd-settings-dice .ekd-no-dice {
     text-align: center;
     font-style: italic;
     opacity: 0.7;
     padding: 12px 0;
 }
 
-.ekd-config .ekd-config-buttons {
+.ekd-config .ekd-config-buttons,
+.ekd-settings-buttons {
     margin-top: 8px;
     text-align: center;
 }
@@ -277,7 +293,7 @@
 .ekd-pf-5 { transform: rotateX(-90deg) translateZ(40px); }
 
 /* ============================================= */
-/*  Settings Config – injected dice list         */
+/*  Settings Config – injected panel extras      */
 /* ============================================= */
 
 .ekd-settings-header {
@@ -311,57 +327,4 @@
 .ekd-settings-help {
     font-size: 12px;
     cursor: pointer;
-}
-
-.ekd-settings-dice .ekd-settings-list {
-    list-style: none;
-    margin: 4px 0;
-    padding: 0;
-}
-
-.ekd-settings-entry {
-    padding: 4px 6px;
-    border-bottom: 1px solid var(--color-border-light-tertiary, #ccc);
-    align-items: center;
-    gap: 8px;
-}
-
-.ekd-settings-entry:last-child {
-    border-bottom: none;
-}
-
-.ekd-settings-name {
-    font-weight: bold;
-}
-
-.ekd-settings-denom {
-    font-family: monospace;
-    color: #fff;
-    background: #4a4a4a;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    min-width: 36px;
-    text-align: center;
-    letter-spacing: 0.5px;
-}
-
-.ekd-settings-controls {
-    display: flex;
-    gap: 6px;
-}
-
-.ekd-settings-controls a {
-    cursor: pointer;
-    opacity: 0.7;
-}
-
-.ekd-settings-controls a:hover {
-    opacity: 1;
-}
-
-.ekd-settings-buttons {
-    margin-top: 8px;
-    text-align: center;
 }
