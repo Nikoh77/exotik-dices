@@ -339,13 +339,6 @@ export class ExotikDiceConfig extends FormApplication {
         };
         const previewDsnType = dsnGeoType[faceCount] || "d6";
 
-        // Face strip preview (all face counts)
-        const previewStrip = [];
-        for (let i = 0; i < faceCount; i++) {
-            const resolved = resolveFace(faceMap, i);
-            previewStrip.push({ texture: resolved?.texture || "", num: i + 1 });
-        }
-
         return {
             editing: true,
             dice: d,
@@ -354,7 +347,6 @@ export class ExotikDiceConfig extends FormApplication {
             geometryOptions,
             showGeometry,
             previewDsnType,
-            previewStrip,
             faceCount,
             slug: d.slug || "",
             assetHint: d.slug
@@ -453,6 +445,12 @@ export class ExotikDiceConfig extends FormApplication {
                     setTimeout(() => this.render(true), 0);
                 });
             });
+
+            // Geometry dropdown change → refresh 3D preview
+            el.querySelector('[name="geometry"]')?.addEventListener(
+                "change",
+                () => this._refreshDSNPreview(),
+            );
 
             // Live image previews
             el.querySelectorAll("input.image").forEach((input) => {
@@ -625,30 +623,9 @@ export class ExotikDiceConfig extends FormApplication {
             preview.style.display = "none";
         }
 
-        // Update strip preview for texture fields
+        // Refresh DSN 3D preview when texture or bump changes
         const fieldName = input.name;
-        if (fieldName && fieldName.includes(".texture")) {
-            const match = fieldName.match(/faceMap\.([0-9]+)\.texture/);
-            if (match) {
-                const idx = parseInt(match[1]);
-                const form = input.closest("form");
-                if (form) {
-                    const stripFaces = form.querySelectorAll(".ekd-strip-face");
-                    if (stripFaces[idx]) {
-                        if (input.value) {
-                            stripFaces[idx].style.backgroundImage = `url(${input.value})`;
-                            const numSpan = stripFaces[idx].querySelector(".ekd-strip-num");
-                            if (numSpan) numSpan.style.display = "none";
-                        } else {
-                            stripFaces[idx].style.backgroundImage = "";
-                            const numSpan = stripFaces[idx].querySelector(".ekd-strip-num");
-                            if (numSpan) numSpan.style.display = "";
-                        }
-                    }
-                }
-            }
-
-            // Refresh DSN 3D preview
+        if (fieldName && (fieldName.includes(".texture") || fieldName.includes(".bump"))) {
             this._refreshDSNPreview();
         }
     }
@@ -698,6 +675,13 @@ export class ExotikDiceConfig extends FormApplication {
             this._previewBox = box;
             this._previewContainer = canvasDiv;
 
+            // Boost lighting for better visibility
+            if (box.scene) {
+                box.scene.traverse((obj) => {
+                    if (obj.isLight) obj.intensity *= 2.5;
+                });
+            }
+
             // Build and show the die
             await this._renderPreviewDie();
 
@@ -725,8 +709,6 @@ export class ExotikDiceConfig extends FormApplication {
         const faceCount = d.faces || 6;
         const geoMap = { 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12", 20: "d20" };
         const dsnGeo = geoMap[faceCount] || "d6";
-        // Use a preview-only type to avoid polluting real dice registrations
-        const previewType = "dekdpreview";
 
         // Build labels and bumps from current faceMap
         const labels = d.faceMap.map((_, i) => {
@@ -741,13 +723,27 @@ export class ExotikDiceConfig extends FormApplication {
         try {
             const factory = game.dice3d.DiceFactory;
 
-            // Remove old mesh if any
+            // Remove old mesh and dispose its materials
             if (this._previewMesh && box.scene) {
                 box.scene.remove(this._previewMesh);
+                this._previewMesh.traverse?.((child) => {
+                    if (child.isMesh) {
+                        child.geometry?.dispose();
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((m) => {
+                                m.map?.dispose();
+                                m.bumpMap?.dispose();
+                                m.dispose();
+                            });
+                        } else if (child.material) {
+                            child.material.map?.dispose();
+                            child.material.bumpMap?.dispose();
+                            child.material.dispose();
+                        }
+                    }
+                });
                 this._previewMesh = null;
             }
-            // Dispose cached materials for preview to force texture refresh
-            factory.disposeCachedMaterials?.(previewType);
 
             // ── Ensure preview system exists ──
             const previewSystem = "ekd-preview";
@@ -758,15 +754,20 @@ export class ExotikDiceConfig extends FormApplication {
                 );
             }
 
-            // ── Manually build and register a DicePreset ──
-            // Get the standard model for this shape (d4/d6/d8/…)
+            // Clear any previous preview preset from the system
+            factory.systems.get(previewSystem)?.dice.clear();
+
+            // ── Get the standard model for this shape (d4/d6/d8/…) ──
             const standardModel = factory.systems
                 .get("standard")
                 .dice.get(dsnGeo);
             if (!standardModel) return;
 
+            // ── Build and register a DicePreset ──
+            // Use the real DSN type (d4/d6/d8…) so factory.create picks
+            // the correct geometry builder for that shape.
             const DicePreset = standardModel.constructor;
-            const preset = new DicePreset(previewType, standardModel.shape);
+            const preset = new DicePreset(dsnGeo, standardModel.shape);
             preset.term = "Die";
             preset.setLabels(labels);
             if (bumpMaps.some((b) => b)) preset.setBumpMaps(bumpMaps);
@@ -777,9 +778,9 @@ export class ExotikDiceConfig extends FormApplication {
             preset.inertia = standardModel.inertia;
             preset.system = previewSystem;
 
-            // Put it in both standard + preview system so factory.create finds it
-            factory.systems.get("standard").dice.set(previewType, preset);
-            factory.systems.get(previewSystem).dice.set(previewType, preset);
+            // Register ONLY in the preview system (not "standard") to
+            // avoid side-effects on real dice.
+            factory.systems.get(previewSystem).dice.set(dsnGeo, preset);
 
             // Load textures on the preset (images must be ready before create)
             await preset.loadTextures();
@@ -808,16 +809,18 @@ export class ExotikDiceConfig extends FormApplication {
                 };
             if (!scopedCache.type) scopedCache.type = "showcase";
 
-            const mesh = await factory.create(
-                scopedCache,
-                previewType,
-                appearance,
-            );
+            const mesh = await factory.create(scopedCache, dsnGeo, appearance);
 
             if (mesh) {
                 mesh.position.set(0, 0, 0);
                 mesh.castShadow = false;
                 mesh.receiveShadow = false;
+
+                // ── Apply custom geometry if configured ──
+                if (d.geometry && d.geometry !== "standard") {
+                    await this._applyCustomGeometry(mesh, d.geometry);
+                }
+
                 box.scene?.add(mesh);
                 this._previewMesh = mesh;
                 if (typeof box.renderScene === "function") box.renderScene();
@@ -825,6 +828,51 @@ export class ExotikDiceConfig extends FormApplication {
         } catch (err) {
             console.warn(`${MODULE_ID} | DSN preview render failed:`, err);
         }
+    }
+
+    /**
+     * Load a custom GLB geometry and apply it to the preview mesh.
+     */
+    async _applyCustomGeometry(mesh, geoName) {
+        const allGeos = ExotikDiceConfig._geometriesCache || [];
+        const geo = allGeos.find((g) => g.value === geoName);
+        if (!geo) return;
+
+        const factory = game.dice3d?.DiceFactory;
+        if (!factory?.loaderGLTF) return;
+
+        return new Promise((resolve) => {
+            factory.loaderGLTF.load(
+                geo.file,
+                (gltf) => {
+                    let geometry = null;
+                    gltf.scene.traverse((child) => {
+                        if (child.isMesh && !geometry) geometry = child.geometry;
+                    });
+                    if (geometry) {
+                        const s = 60 / 100;
+                        const g = geometry.clone();
+                        g.scale(s, s, s);
+                        if (mesh.isMesh) {
+                            mesh.geometry = g;
+                        } else {
+                            mesh.traverse((child) => {
+                                if (child.isMesh) child.geometry = g;
+                            });
+                        }
+                    }
+                    resolve();
+                },
+                undefined,
+                (err) => {
+                    console.warn(
+                        `${MODULE_ID} | Could not load custom geometry ${geoName}:`,
+                        err,
+                    );
+                    resolve();
+                },
+            );
+        });
     }
 
     /**
@@ -873,20 +921,22 @@ export class ExotikDiceConfig extends FormApplication {
             this._previewMesh = null;
         }
         if (this._previewBox) {
-            try { this._previewBox.dispose?.(); } catch {}
+            try {
+                this._previewBox.dispose?.();
+            } catch {}
             this._previewBox = null;
         }
         this._previewContainer = null;
 
-        // Remove temporary preview preset from DSN factory
+        // Remove temporary preview presets from DSN factory
         try {
             const factory = game.dice3d?.DiceFactory;
             if (factory) {
-                factory.systems.get("standard")?.dice.delete("dekdpreview");
-                factory.systems.get("ekd-preview")?.dice.delete("dekdpreview");
-                factory.disposeCachedMaterials?.("dekdpreview");
+                factory.systems.get("ekd-preview")?.dice.clear();
             }
-        } catch { /* best effort */ }
+        } catch {
+            /* best effort */
+        }
     }
 
     /** Override close to clean up the 3D preview. */

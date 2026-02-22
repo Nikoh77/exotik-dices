@@ -69,16 +69,6 @@
     <!-- 3D DSN Preview -->
     <div class="ekd-3d-preview" data-dsn-type="{{previewDsnType}}" data-faces="{{faceCount}}"></div>
 
-    <!-- Face strip preview (all dice) -->
-    <div class="ekd-preview-strip">
-        {{#each previewStrip}}
-        <div class="ekd-strip-face"
-             {{#if this.texture}}style="background-image:url({{this.texture}});"{{/if}}>
-            {{#unless this.texture}}<span class="ekd-strip-num">{{this.num}}</span>{{/unless}}
-        </div>
-        {{/each}}
-    </div>
-
     <h3>{{localize "EKD.Editor.FaceConfig"}}</h3>
 
     <!-- Face grid -->
