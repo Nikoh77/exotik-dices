@@ -11,7 +11,6 @@
  */
 
 import { zipSync } from "./vendor/fflate.min.js";
-import { deleteServerPath } from "./ExotikDiceConfig.js";
 
 const MODULE_ID = "exotik-dices";
 
@@ -186,6 +185,12 @@ export async function autoImportDice() {
     const knownSlugs = new Set(currentDefs.map((d) => d.slug).filter(Boolean));
     const knownIds = new Set(currentDefs.map((d) => d.id).filter(Boolean));
 
+    // Paths already imported in a previous session (Foundry has no file-delete
+    // API, so dice.json files remain on disk and we skip them here).
+    const importedPaths = new Set(
+        game.settings.get(MODULE_ID, "importedPaths") || [],
+    );
+
     let imported = 0;
 
     for (const dir of allSubDirs) {
@@ -205,6 +210,9 @@ export async function autoImportDice() {
             (f) => f.endsWith("/dice.json") || f.endsWith("\\dice.json"),
         );
         if (!diceJsonPath) continue;
+
+        // Skip if already imported in a previous session
+        if (importedPaths.has(diceJsonPath)) continue;
 
         // Read and parse dice.json
         let diceDef;
@@ -274,17 +282,14 @@ export async function autoImportDice() {
             `${MODULE_ID} | autoImport: imported "${diceDef.name}" from ${slug}/dice.json`,
         );
 
-        // Delete dice.json so it won't be re-imported on next startup
-        const deleted = await deleteServerPath(diceJsonPath);
-        if (!deleted) {
-            console.warn(
-                `${MODULE_ID} | autoImport: could not delete ${diceJsonPath} – file will persist but slug-check prevents re-import`,
-            );
-        }
+        // Mark as imported so it won't be re-imported on next startup
+        importedPaths.add(diceJsonPath);
     }
 
     if (imported > 0) {
         await game.settings.set(MODULE_ID, "diceDefinitions", currentDefs);
+        // Persist the list of already-imported dice.json paths
+        await game.settings.set(MODULE_ID, "importedPaths", [...importedPaths]);
         ui.notifications.info(
             game.i18n.format("EKD.Import.Success", { count: imported }),
         );

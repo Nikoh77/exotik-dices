@@ -197,6 +197,15 @@ function registerSettings() {
         default: 0,
     });
 
+    // Paths of dice.json files already imported (Foundry has no file-delete API,
+    // so we track them here to avoid re-importing).
+    game.settings.register(MODULE_ID, "importedPaths", {
+        scope: "world",
+        config: false,
+        type: Array,
+        default: [],
+    });
+
     game.settings.registerMenu(MODULE_ID, "diceConfig", {
         name: "EKD.Settings.ConfigureDice",
         label: "EKD.Settings.ConfigureLabel",
