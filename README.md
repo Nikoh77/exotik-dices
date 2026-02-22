@@ -1,4 +1,4 @@
-![Descrizione Immagine](head.png)
+![Exotic Dices head image](head.png)
 
 # Exotik Dices
 

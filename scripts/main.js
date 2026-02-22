@@ -106,30 +106,7 @@ function registerDiceOnTheFly(definitions) {
         CONFIG.Dice.terms[DiceClass.name] = DiceClass;
         CONFIG.Dice.terms[def.denomination] = DiceClass;
 
-        const diceType = `d${def.denomination}`;
-        _ekdDiceTypes.add(diceType);
-
-        // If DSN is already initialised, register / update the preset
-        if (game.dice3d) {
-            try {
-                const labels = def.faceMap.map((_, i) =>
-                    resolveFace(def.faceMap, i)?.texture || "",
-                );
-                const bumpMaps = def.faceMap.map((_, i) =>
-                    resolveFace(def.faceMap, i)?.bump || "",
-                );
-                const presetData = {
-                    type: diceType,
-                    labels,
-                    system: "ekd",
-                };
-                if (bumpMaps.some((b) => b)) presetData.bumpMaps = bumpMaps;
-                game.dice3d.addDicePreset(presetData, getDSNGeometryType(def.faces));
-            } catch (err) {
-                console.warn(`${MODULE_ID} | on-the-fly DSN preset error for ${diceType}:`, err);
-            }
-        }
-
+        _ekdDiceTypes.add(`d${def.denomination}`);
         oldDenoms.delete(def.denomination);
         console.log(
             `${MODULE_ID} | Registered dice: d${def.denomination} - "${def.name}"`,
@@ -143,6 +120,9 @@ function registerDiceOnTheFly(definitions) {
         _ekdDiceTypes.delete(`d${denom}`);
         console.log(`${MODULE_ID} | Unregistered dice: d${denom}`);
     }
+
+    // Re-register DSN presets if DSN is already active
+    if (game.dice3d) applyDSNPresets(game.dice3d);
 }
 
 /* ---------------------------------------- */
@@ -551,6 +531,33 @@ Hooks.on("ekdDiceChanged", () => {
     registerDiceOnTheFly(definitions);
 });
 
+/* ---------------------------------------- */
+/*  DSN preset helper                        */
+/* ---------------------------------------- */
+
+/**
+ * (Re-)register all known Exotik dice presets into DSN.
+ * Safe to call multiple times — each call replaces any stale preset
+ * data that DSN may have written back during its own update cycle.
+ *
+ * @param {object} dice3d  The DSN Dice3D instance
+ */
+function applyDSNPresets(dice3d) {
+    for (const def of _diceDefinitions.values()) {
+        const diceType = `d${def.denomination}`;
+        const labels = def.faceMap.map((_, i) => resolveFace(def.faceMap, i)?.texture || "");
+        const bumpMaps = def.faceMap.map((_, i) => resolveFace(def.faceMap, i)?.bump || "");
+        const presetData = { type: diceType, labels, system: "ekd" };
+        if (bumpMaps.some((b) => b)) presetData.bumpMaps = bumpMaps;
+        try {
+            dice3d.addDicePreset(presetData, getDSNGeometryType(def.faces));
+        } catch (err) {
+            console.warn(`${MODULE_ID} | DSN preset re-register error for ${diceType}:`, err);
+        }
+    }
+    console.log(`${MODULE_ID} | DSN presets applied (${_diceDefinitions.size} dice)`);
+}
+
 Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
@@ -561,45 +568,24 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     const factory = dice3d.DiceFactory;
 
     // ── Register DSN presets via official API ──
+    // Populate _ekdDiceTypes first, then apply presets.
     for (const def of definitions) {
-        const labels = def.faceMap.map((_, i) => {
-            const r = resolveFace(def.faceMap, i);
-            return r?.texture || "";
-        });
-        const bumpMaps = def.faceMap.map((_, i) => {
-            const r = resolveFace(def.faceMap, i);
-            return r?.bump || "";
-        });
-        const dsnGeo = getDSNGeometryType(def.faces);
-        const diceType = `d${def.denomination}`;
-
-        try {
-            // Use dice3d.addDicePreset() — the official DSN API.
-            // The second parameter is the fallback base type (e.g. "d6")
-            // used to determine the physical shape when our custom type
-            // isn't in the standard set.
-            const presetData = {
-                type: diceType,
-                labels,
-                system: "ekd",
-            };
-            if (bumpMaps.some((b) => b)) {
-                presetData.bumpMaps = bumpMaps;
-            }
-
-            dice3d.addDicePreset(presetData, dsnGeo);
-
-            _ekdDiceTypes.add(diceType);
-            console.log(
-                `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo} (system: ekd)`,
-            );
-        } catch (err) {
-            console.warn(
-                `${MODULE_ID} | Failed to register DSN preset for ${diceType}:`,
-                err,
-            );
-        }
+        _ekdDiceTypes.add(`d${def.denomination}`);
     }
+    applyDSNPresets(dice3d);
+
+    // ── Intercept game.dice3d.update ──
+    // DSN's settings-save flow calls game.dice3d.update(h) at the end of
+    // _updateObject.  During that cycle DSN may re-process CONFIG.Dice.terms
+    // and overwrite our presets with the internalAdd variants (which carry
+    // HTML <img> strings as labels rather than plain texture URLs).
+    // Re-applying our presets immediately after DSN's update restores the
+    // correct state without a page reload.
+    const _origUpdate = dice3d.update.bind(dice3d);
+    dice3d.update = async function dsnUpdateWrapper(config) {
+        await _origUpdate(config);
+        applyDSNPresets(dice3d);
+    };
 
     // ── Dynamic geometry swap ──
     // Scan geometries folder for .glb files
