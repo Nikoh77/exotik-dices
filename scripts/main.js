@@ -561,11 +561,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                         `${getUserDicePath()}/${dice.slug}`,
                         `${DICES_PATH}/${dice.slug}`,
                     ];
+                    console.log(`${MODULE_ID} | Attempting to delete folders for slug "${dice.slug}":`, possiblePaths);
                     for (const folderPath of possiblePaths) {
                         await deleteFolderRecursive(folderPath);
-                        console.log(
-                            `${MODULE_ID} | Deleted asset folder: ${folderPath}`,
-                        );
                     }
                 }
                 app.render(true);

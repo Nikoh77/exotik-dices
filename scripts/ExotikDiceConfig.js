@@ -76,27 +76,55 @@ function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
 }
 
 /**
+ * Delete a single file or empty directory on the Foundry server.
+ * Tries the standard Foundry file-management endpoint.
+ * @param {string} targetPath  Server-relative path (e.g. "exotik-dices/dices/slug/file.png")
+ * @returns {Promise<boolean>}
+ */
+async function _deleteServerPath(targetPath) {
+    const route = (typeof foundry !== "undefined" && foundry.utils?.getRoute)
+        ? foundry.utils.getRoute("/api/files")
+        : "/api/files";
+
+    try {
+        const resp = await fetch(route, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: "data", path: targetPath }),
+        });
+        if (!resp.ok) {
+            const body = await resp.text().catch(() => "");
+            console.warn(`${MODULE_ID} | DELETE ${targetPath} → HTTP ${resp.status}: ${body}`);
+            return false;
+        }
+        console.log(`${MODULE_ID} | Deleted: ${targetPath}`);
+        return true;
+    } catch (e) {
+        console.warn(`${MODULE_ID} | DELETE ${targetPath} error:`, e);
+        return false;
+    }
+}
+
+/**
  * Recursively delete a folder and all its contents from the Foundry data dir.
  * Deletes files first, then sub-directories (depth-first), then the folder itself.
  * @param {string} folderPath  Server-relative path
  */
 export async function deleteFolderRecursive(folderPath) {
+    console.log(`${MODULE_ID} | deleteFolderRecursive: ${folderPath}`);
     let result;
     try {
         result = await FP.browse("data", folderPath);
     } catch {
+        console.log(`${MODULE_ID} | Folder not found (browse failed): ${folderPath}`);
         return; // folder doesn't exist
     }
 
+    console.log(`${MODULE_ID} | Found ${(result.files||[]).length} files, ${(result.dirs||[]).length} sub-dirs in ${folderPath}`);
+
     // Delete files in this directory
     for (const file of result.files || []) {
-        try {
-            await fetch(window.location.origin + "/api/files", {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ path: file, source: "data" }),
-            });
-        } catch { /* best effort */ }
+        await _deleteServerPath(file);
     }
 
     // Recurse into subdirectories
@@ -105,13 +133,7 @@ export async function deleteFolderRecursive(folderPath) {
     }
 
     // Delete the (now empty) folder itself
-    try {
-        await fetch(window.location.origin + "/api/files", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: folderPath, source: "data" }),
-        });
-    } catch { /* best effort */ }
+    await _deleteServerPath(folderPath);
 }
 
 /** Create asset sub-folders for a dice on the server. */
