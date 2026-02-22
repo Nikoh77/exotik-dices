@@ -696,6 +696,15 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             // our presets appear in DSN's configuration UI.
             factory.systems.get("ekd").dice.set(diceType, preset);
 
+            // DSN auto-discovers dice from CONFIG.Dice.terms and adds default
+            // presets to "standard" and every other visible system.  Remove
+            // those auto-generated entries so our dice don't clutter the
+            // DSN appearance panel.
+            for (const [sysId, sys] of factory.systems) {
+                if (sysId === "ekd") continue;
+                sys.dice.delete(diceType);
+            }
+
             console.log(
                 `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo}`,
             );
