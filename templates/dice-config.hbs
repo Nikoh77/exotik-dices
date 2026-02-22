@@ -66,7 +66,7 @@
         {{/if}}
     </div>
 
-    <!-- 3D Cube Preview (d6 only, when textures exist) -->
+    <!-- 3D Cube Preview (d6) -->
     {{#if showCubePreview}}
     <div class="ekd-preview-scene">
         <div class="ekd-preview-cube">
@@ -75,6 +75,18 @@
                  {{#if this}}style="background-image:url({{this}});"{{/if}}></div>
             {{/each}}
         </div>
+    </div>
+    {{/if}}
+
+    <!-- Flat face strip preview (non-d6) -->
+    {{#if showStripPreview}}
+    <div class="ekd-preview-strip">
+        {{#each previewStrip}}
+        <div class="ekd-strip-face"
+             {{#if this.texture}}style="background-image:url({{this.texture}});"{{/if}}>
+            {{#unless this.texture}}<span class="ekd-strip-num">{{this.num}}</span>{{/unless}}
+        </div>
+        {{/each}}
     </div>
     {{/if}}
 
@@ -185,10 +197,10 @@
             <span class="ekd-dice-faces flex0">{{this.faces}} {{localize "EKD.Config.FacesLabel"}}</span>
             <span class="ekd-dice-geometry flex1">{{this.geometryLabel}}</span>
             <div class="ekd-dice-controls flex0">
+                {{#unless this.isDefault}}
                 <a class="ekd-edit" data-id="{{this.id}}" title="{{localize 'EKD.Config.Edit'}}">
                     <i class="fas fa-edit"></i>
                 </a>
-                {{#unless this.isDefault}}
                 <a class="ekd-delete" data-id="{{this.id}}" title="{{localize 'EKD.Config.Delete'}}">
                     <i class="fas fa-trash"></i>
                 </a>

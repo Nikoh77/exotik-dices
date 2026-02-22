@@ -436,6 +436,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         listHtml += `<ul class="ekd-settings-list">`;
         for (const d of definitions) {
             const isDefault = d.id === "ekd-default-combat";
+            const editBtn = isDefault
+                ? ""
+                : `<a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>`;
             const deleteBtn = isDefault
                 ? ""
                 : `<a class="ekd-settings-delete" title="${t.del}"><i class="fas fa-trash"></i></a>`;
@@ -446,7 +449,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     <span class="ekd-settings-faces flex0">${d.faces} ${t.faces}</span>
                     <span class="ekd-settings-controls flex0">
                         <a class="ekd-settings-export" title="${t.exp}"><i class="fas fa-file-export"></i></a>
-                        <a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>
+                        ${editBtn}
                         ${deleteBtn}
                     </span>
                 </li>`;
@@ -471,7 +474,14 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             event.preventDefault();
             const id = target.closest("[data-id]")?.dataset.id;
             const dice = definitions.find((d) => d.id === id);
-            if (dice) ExotikDiceConfig.editDice(dice, app);
+            if (!dice) return;
+            if (dice.id === "ekd-default-combat") {
+                ui.notifications.warn(
+                    game.i18n.localize("EKD.Config.DefaultProtected"),
+                );
+                return;
+            }
+            ExotikDiceConfig.editDice(dice, app);
         }
 
         if (target.closest(".ekd-settings-export")) {

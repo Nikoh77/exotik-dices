@@ -295,6 +295,36 @@
 .ekd-pf-4 { transform: rotateX(90deg) translateZ(40px); }
 .ekd-pf-5 { transform: rotateX(-90deg) translateZ(40px); }
 
+/* ── Flat face-strip preview (non-d6) ──────── */
+
+.ekd-preview-strip {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 12px auto;
+    max-width: 100%;
+}
+
+.ekd-strip-face {
+    width: 52px;
+    height: 52px;
+    background-size: cover;
+    background-position: center;
+    background-color: #e8e0d4;
+    border: 1px solid #999;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ekd-strip-num {
+    font-size: 16px;
+    font-weight: bold;
+    color: #888;
+}
+
 /* ============================================= */
 /*  Settings Config – injected panel extras      */
 /* ============================================= */
@@ -312,7 +342,7 @@
 
 .ekd-hint-note {
     font-style: italic;
-    font-size: 11px;
+    font-size: 13px;
     opacity: 0.85;
     margin-top: 0 !important;
     margin-bottom: 8px !important;

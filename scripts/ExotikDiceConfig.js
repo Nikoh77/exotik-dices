@@ -324,7 +324,7 @@ export class ExotikDiceConfig extends FormApplication {
               ]
             : [];
 
-        // CSS 3D cube preview (d6 only)
+        // CSS 3D cube preview (d6) – always shown
         let previewFaces = null;
         let showCubePreview = false;
         if (faceCount === 6) {
@@ -333,8 +333,16 @@ export class ExotikDiceConfig extends FormApplication {
                 const resolved = resolveFace(faceMap, i);
                 previewFaces.push(resolved?.texture || "");
             }
-            showCubePreview = previewFaces.some((f) => f);
+            showCubePreview = true;
         }
+
+        // Flat face strip preview (all face counts except d6)
+        const previewStrip = [];
+        for (let i = 0; i < faceCount; i++) {
+            const resolved = resolveFace(faceMap, i);
+            previewStrip.push({ texture: resolved?.texture || "", num: i + 1 });
+        }
+        const showStripPreview = faceCount !== 6;
 
         return {
             editing: true,
@@ -345,6 +353,9 @@ export class ExotikDiceConfig extends FormApplication {
             showGeometry,
             showCubePreview,
             previewFaces,
+            showStripPreview,
+            previewStrip,
+            faceCount,
             slug: d.slug || "",
             assetHint: d.slug
                 ? `${diceBasePath(d.slug)}/textures/,  …/bump_maps/,  …/chat_2d/`
@@ -497,6 +508,12 @@ export class ExotikDiceConfig extends FormApplication {
         const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = defs.find((d) => d.id === id);
         if (!dice) return;
+        if (dice.id === "ekd-default-combat") {
+            ui.notifications.warn(
+                game.i18n.localize("EKD.Config.DefaultProtected"),
+            );
+            return;
+        }
         this._originalSnapshot = null;
         this._editingDice = foundry.utils.deepClone(dice);
         setTimeout(() => this.render(true), 0);
@@ -696,6 +713,45 @@ export class ExotikDiceConfig extends FormApplication {
 
         // ── Create folders ──
         if (diceDef.slug) await ensureDiceFolders(diceDef.slug);
+
+        // ── Copy asset files into the dice folder ──
+        if (diceDef.slug) {
+            const basePath = `modules/${MODULE_ID}/assets/dices/${diceDef.slug}`;
+            const subfolders = { texture: "textures", bump: "bump_maps", icon: "chat_2d" };
+
+            for (let i = 0; i < diceDef.faceMap.length; i++) {
+                const face = diceDef.faceMap[i];
+                if (face.refFace != null) continue; // skip references
+
+                for (const [field, subfolder] of Object.entries(subfolders)) {
+                    const srcPath = face[field];
+                    if (!srcPath) continue;
+
+                    // Skip if already inside this dice's asset folder
+                    if (srcPath.startsWith(basePath + "/")) continue;
+
+                    try {
+                        // Fetch the source file
+                        const response = await fetch(srcPath);
+                        if (!response.ok) continue;
+                        const blob = await response.blob();
+
+                        // Determine filename
+                        const srcFilename = srcPath.split("/").pop();
+                        const file = new File([blob], srcFilename, { type: blob.type });
+
+                        // Upload to the target subfolder
+                        const targetDir = `${basePath}/${subfolder}`;
+                        const result = await FilePicker.upload("data", targetDir, file, {});
+                        if (result?.path) {
+                            face[field] = result.path;
+                        }
+                    } catch (err) {
+                        console.warn(`${MODULE_ID} | Could not copy ${field} for face ${i}:`, err);
+                    }
+                }
+            }
+        }
 
         // ── Save ──
         if (existingIdx >= 0) currentDefs[existingIdx] = diceDef;
