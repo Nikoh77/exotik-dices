@@ -121,8 +121,33 @@ function registerDiceOnTheFly(definitions) {
         console.log(`${MODULE_ID} | Unregistered dice: d${denom}`);
     }
 
-    // Re-register DSN presets if DSN is already active
-    if (game.dice3d) applyDSNPresets(game.dice3d);
+    // Re-register DSN presets if DSN is already active, then ensure
+    // all label textures are loaded before any render can occur.
+    if (game.dice3d) {
+        const factory = game.dice3d.DiceFactory;
+        for (const def of definitions) {
+            const diceType = `d${def.denomination}`;
+            const labels = def.faceMap.map((_, i) =>
+                resolveFace(def.faceMap, i)?.texture || "",
+            );
+            const bumpMaps = def.faceMap.map((_, i) =>
+                resolveFace(def.faceMap, i)?.bump || "",
+            );
+            const presetData = { type: diceType, labels, system: "ekd" };
+            if (bumpMaps.some((b) => b)) presetData.bumpMaps = bumpMaps;
+            try {
+                game.dice3d.addDicePreset(presetData, getDSNGeometryType(def.faces));
+            } catch (err) {
+                console.warn(`${MODULE_ID} | DSN preset error for ${diceType}:`, err);
+            }
+        }
+        // Await texture loading so labels become Image objects before
+        // any render can use them (prevents text-instead-of-texture bug).
+        factory.preloadPresets(true).then(() => {
+            factory.disposeCachedMaterials();
+            console.log(`${MODULE_ID} | DSN presets re-registered and textures loaded`);
+        });
+    }
 }
 
 /* ---------------------------------------- */
@@ -531,33 +556,6 @@ Hooks.on("ekdDiceChanged", () => {
     registerDiceOnTheFly(definitions);
 });
 
-/* ---------------------------------------- */
-/*  DSN preset helper                        */
-/* ---------------------------------------- */
-
-/**
- * (Re-)register all known Exotik dice presets into DSN.
- * Safe to call multiple times — each call replaces any stale preset
- * data that DSN may have written back during its own update cycle.
- *
- * @param {object} dice3d  The DSN Dice3D instance
- */
-function applyDSNPresets(dice3d) {
-    for (const def of _diceDefinitions.values()) {
-        const diceType = `d${def.denomination}`;
-        const labels = def.faceMap.map((_, i) => resolveFace(def.faceMap, i)?.texture || "");
-        const bumpMaps = def.faceMap.map((_, i) => resolveFace(def.faceMap, i)?.bump || "");
-        const presetData = { type: diceType, labels, system: "ekd" };
-        if (bumpMaps.some((b) => b)) presetData.bumpMaps = bumpMaps;
-        try {
-            dice3d.addDicePreset(presetData, getDSNGeometryType(def.faces));
-        } catch (err) {
-            console.warn(`${MODULE_ID} | DSN preset re-register error for ${diceType}:`, err);
-        }
-    }
-    console.log(`${MODULE_ID} | DSN presets applied (${_diceDefinitions.size} dice)`);
-}
-
 Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
@@ -568,24 +566,40 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     const factory = dice3d.DiceFactory;
 
     // ── Register DSN presets via official API ──
-    // Populate _ekdDiceTypes first, then apply presets.
     for (const def of definitions) {
-        _ekdDiceTypes.add(`d${def.denomination}`);
-    }
-    applyDSNPresets(dice3d);
+        const diceType = `d${def.denomination}`;
+        _ekdDiceTypes.add(diceType);
 
-    // ── Intercept game.dice3d.update ──
-    // DSN's settings-save flow calls game.dice3d.update(h) at the end of
-    // _updateObject.  During that cycle DSN may re-process CONFIG.Dice.terms
-    // and overwrite our presets with the internalAdd variants (which carry
-    // HTML <img> strings as labels rather than plain texture URLs).
-    // Re-applying our presets immediately after DSN's update restores the
-    // correct state without a page reload.
-    const _origUpdate = dice3d.update.bind(dice3d);
-    dice3d.update = async function dsnUpdateWrapper(config) {
-        await _origUpdate(config);
-        applyDSNPresets(dice3d);
-    };
+        const labels = def.faceMap.map((_, i) =>
+            resolveFace(def.faceMap, i)?.texture || "",
+        );
+        const bumpMaps = def.faceMap.map((_, i) =>
+            resolveFace(def.faceMap, i)?.bump || "",
+        );
+        const presetData = { type: diceType, labels, system: "ekd" };
+        if (bumpMaps.some((b) => b)) presetData.bumpMaps = bumpMaps;
+
+        try {
+            dice3d.addDicePreset(presetData, getDSNGeometryType(def.faces));
+            console.log(
+                `${MODULE_ID} | DSN preset registered: ${diceType} (system: ekd)`,
+            );
+        } catch (err) {
+            console.warn(
+                `${MODULE_ID} | Failed to register DSN preset for ${diceType}:`,
+                err,
+            );
+        }
+    }
+
+    // Ensure all label textures are fully loaded as Image objects.
+    // addDicePreset → register → loadTextures() is fire-and-forget;
+    // we must await preloadPresets so that DicePreset.labels[] contains
+    // HTMLImageElement objects instead of raw URL strings.  Without this
+    // wait, DSN's createTextMaterial would draw the URL as text on the
+    // dice face instead of the texture image.
+    await factory.preloadPresets(true);
+    console.log(`${MODULE_ID} | DSN preset textures loaded`);
 
     // ── Dynamic geometry swap ──
     // Scan geometries folder for .glb files
@@ -643,16 +657,31 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     }
 
     // ── Monkey-patch DiceFactory.create ──
-    // Only needed for geometry swap now. addDicePreset() handles the
-    // system registration, so we no longer need to force system override.
-    // However, we still force system="ekd" at render time to ensure our
-    // textures are always used regardless of user's selected DSN system.
+    // Forces system="ekd" at render time so our textures are always used
+    // regardless of the user's DSN system selection.  Also guarantees
+    // that presets' textures are fully loaded as HTMLImageElement objects
+    // before the mesh is created; without this defensive await, DSN's
+    // createTextMaterial would draw the raw URL string as text whenever
+    // the preset hasn't finished loading yet (race condition).
     if (_ekdDiceTypes.size > 0 || denomToGeo.size > 0) {
         const origCreate = factory.create.bind(factory);
         factory.create = async function (t, i, r) {
             // Force our dice to resolve from the "ekd" system
             if (_ekdDiceTypes.has(i) && r) {
                 r = Object.assign({}, r, { system: "ekd" });
+
+                // Defensive: make sure our preset's textures are loaded.
+                // addDicePreset → register → loadTextures() is fire-and-
+                // forget; if rendering happens before that Promise settles,
+                // labels are still plain URL strings → DSN draws text.
+                const ekdSys = this.systems?.get("ekd");
+                const preset = ekdSys?.dice?.get(i);
+                if (preset && !preset.modelLoaded) {
+                    console.warn(
+                        `${MODULE_ID} | Preset ${i} textures not yet loaded – awaiting…`,
+                    );
+                    await preset.loadTextures();
+                }
             }
 
             const mesh = await origCreate(t, i, r);
@@ -681,4 +710,36 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             (denomToGeo.size ? ` - geometry swap: [${[...denomToGeo.keys()].join(", ")}]` : ""),
         );
     }
+
+    // ── Monkey-patch DiceBox.update ──
+    // DSN's DiceConfig._updateObject calls game.dice3d.update(h) (VOID,
+    // drops the Promise from box.update).  After box.update finishes
+    // its internal preloadPresets(), we re-ensure our ekd presets'
+    // textures are loaded.  This covers any edge-case where DSN's
+    // update cycle leaves our presets with stale/unloaded labels.
+    const mainBox = dice3d.box;
+    const origBoxUpdate = mainBox.update.bind(mainBox);
+    mainBox.update = async function (t) {
+        await origBoxUpdate(t);
+
+        // After DSN's own preloadPresets has completed, verify that
+        // every Exotik preset still has its textures loaded.
+        const ekdSys = factory.systems?.get("ekd");
+        if (!ekdSys) return;
+        let reloaded = false;
+        for (const diceType of _ekdDiceTypes) {
+            const preset = ekdSys.dice?.get(diceType);
+            if (preset && !preset.modelLoaded) {
+                await preset.loadTextures();
+                reloaded = true;
+            }
+        }
+        if (reloaded) {
+            factory.disposeCachedMaterials("board");
+            console.log(
+                `${MODULE_ID} | Re-loaded ekd preset textures after DSN update`,
+            );
+        }
+    };
+    console.log(`${MODULE_ID} | DiceBox.update patched`);
 });

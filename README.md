@@ -9,6 +9,7 @@ Almost all of the code was written by AI — not because I couldn’t write it m
 Basically, without AI I wouldn’t have had the time to develop it the old-school way, especially since I’m not a JavaScript developer and it would’ve taken me a bit longer…
 
 That said, the structure, organization, integrations, and the setup for future development were all guided by me — as well as, of course, all the features it currently has.
+
 ## Features
 
 - **Custom Dice** – Create dice with any number of faces (d4, d6, d8, d10, d12, d20) and assign custom textures, bump maps, and chat icons to each face.
