@@ -9,6 +9,10 @@
  */
 
 const MODULE_ID = "exotik-dices";
+
+/** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
+const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
+
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
 const USER_DICES_PATH = `${MODULE_ID}/dices`;
 const GEOMETRIES_PATH = `modules/${MODULE_ID}/assets/geometries`;
@@ -75,7 +79,7 @@ async function ensureDiceFolders(slug) {
     ];
     for (const dir of dirs) {
         try {
-            await FilePicker.createDirectory("data", dir);
+            await FP.createDirectory("data", dir);
         } catch (e) {
             if (
                 !e.message?.includes("EEXIST") &&
@@ -163,7 +167,7 @@ export class ExotikDiceConfig extends FormApplication {
         if (ExotikDiceConfig._geometriesCache)
             return ExotikDiceConfig._geometriesCache;
         try {
-            const result = await FilePicker.browse("data", GEOMETRIES_PATH);
+            const result = await FP.browse("data", GEOMETRIES_PATH);
             const geos = [];
             for (const fp of result.files || []) {
                 if (!fp.endsWith(".glb")) continue;
@@ -545,7 +549,7 @@ export class ExotikDiceConfig extends FormApplication {
             ];
             for (const folderPath of possiblePaths) {
                 try {
-                    await FilePicker.browse("data", folderPath).then(
+                    await FP.browse("data", folderPath).then(
                         async (result) => {
                             for (const file of result.files || []) {
                                 try {
@@ -567,7 +571,7 @@ export class ExotikDiceConfig extends FormApplication {
                             }
                             for (const dir of result.dirs || []) {
                                 try {
-                                    const sub = await FilePicker.browse(
+                                    const sub = await FP.browse(
                                         "data",
                                         dir,
                                     );
@@ -707,6 +711,11 @@ export class ExotikDiceConfig extends FormApplication {
 
     /**
      * Render (or re-render) the preview die mesh using current face textures.
+     *
+     * We bypass dice3d.addDicePreset() because it crashes on custom
+     * denominations that aren't registered in CONFIG.Dice.terms.
+     * Instead we manually create a DicePreset, register it in the factory,
+     * and call factory.create() with a fully-populated appearance object.
      */
     async _renderPreviewDie() {
         if (!this._previewBox || !this._editingDice) return;
@@ -716,8 +725,8 @@ export class ExotikDiceConfig extends FormApplication {
         const faceCount = d.faces || 6;
         const geoMap = { 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12", 20: "d20" };
         const dsnGeo = geoMap[faceCount] || "d6";
-        const denom = d.denomination || "x";
-        const diceType = `d${denom}`;
+        // Use a preview-only type to avoid polluting real dice registrations
+        const previewType = "dekdpreview";
 
         // Build labels and bumps from current faceMap
         const labels = d.faceMap.map((_, i) => {
@@ -730,38 +739,80 @@ export class ExotikDiceConfig extends FormApplication {
         });
 
         try {
+            const factory = game.dice3d.DiceFactory;
+
             // Remove old mesh if any
             if (this._previewMesh && box.scene) {
                 box.scene.remove(this._previewMesh);
                 this._previewMesh = null;
             }
+            // Dispose cached materials for preview to force texture refresh
+            factory.disposeCachedMaterials?.(previewType);
 
-            // Register a temporary preview system & preset via public DSN API
+            // ── Ensure preview system exists ──
             const previewSystem = "ekd-preview";
-            game.dice3d.addSystem({ id: previewSystem, name: "EKD Preview" }, false);
-            game.dice3d.addDicePreset({
-                type: diceType,
-                labels,
-                bumpMaps,
+            if (!factory.systems.has(previewSystem)) {
+                factory.addSystem(
+                    { id: previewSystem, name: "EKD Preview" },
+                    "default",
+                );
+            }
+
+            // ── Manually build and register a DicePreset ──
+            // Get the standard model for this shape (d4/d6/d8/…)
+            const standardModel = factory.systems
+                .get("standard")
+                .dice.get(dsnGeo);
+            if (!standardModel) return;
+
+            const DicePreset = standardModel.constructor;
+            const preset = new DicePreset(previewType, standardModel.shape);
+            preset.term = "Die";
+            preset.setLabels(labels);
+            if (bumpMaps.some((b) => b)) preset.setBumpMaps(bumpMaps);
+            preset.values = standardModel.values;
+            preset.valueMap = standardModel.valueMap;
+            preset.mass = standardModel.mass;
+            preset.scale = standardModel.scale;
+            preset.inertia = standardModel.inertia;
+            preset.system = previewSystem;
+
+            // Put it in both standard + preview system so factory.create finds it
+            factory.systems.get("standard").dice.set(previewType, preset);
+            factory.systems.get(previewSystem).dice.set(previewType, preset);
+
+            // Load textures on the preset (images must be ready before create)
+            await preset.loadTextures();
+
+            // ── Build a complete appearance object ──
+            const appearance = {
                 system: previewSystem,
-            }, dsnGeo);
+                colorset: "custom",
+                foreground: "#FFFFFF",
+                background: "#1a1a2e",
+                outline: "black",
+                edge: "",
+                texture: "none",
+                material: "plastic",
+                font: "Arial",
+                fontScale: null,
+                systemSettings: {},
+                isGhost: false,
+            };
 
-            // Create the mesh using DiceFactory.create()
-            const factory = game.dice3d.DiceFactory;
-            const rendererData = box.renderer || { scopedTextureCache: {}, type: "showcase" };
+            // scopedTextureCache expected by factory.create
+            const scopedCache = box.dicePrediction ||
+                box.scopedTextureCache || {
+                    type: "showcase",
+                    textureCube: box.textureCube ?? null,
+                };
+            if (!scopedCache.type) scopedCache.type = "showcase";
 
-            // Get appearance for our preview system
-            let appearance;
-            if (typeof factory.getAppearanceForDice === "function") {
-                try {
-                    appearance = factory.getAppearanceForDice(previewSystem, diceType);
-                } catch { /* API may differ */ }
-            }
-            if (!appearance) {
-                appearance = { system: previewSystem };
-            }
-
-            const mesh = await factory.create(rendererData, diceType, appearance);
+            const mesh = await factory.create(
+                scopedCache,
+                previewType,
+                appearance,
+            );
 
             if (mesh) {
                 mesh.position.set(0, 0, 0);
@@ -826,6 +877,16 @@ export class ExotikDiceConfig extends FormApplication {
             this._previewBox = null;
         }
         this._previewContainer = null;
+
+        // Remove temporary preview preset from DSN factory
+        try {
+            const factory = game.dice3d?.DiceFactory;
+            if (factory) {
+                factory.systems.get("standard")?.dice.delete("dekdpreview");
+                factory.systems.get("ekd-preview")?.dice.delete("dekdpreview");
+                factory.disposeCachedMaterials?.("dekdpreview");
+            }
+        } catch { /* best effort */ }
     }
 
     /** Override close to clean up the 3D preview. */
@@ -997,7 +1058,7 @@ export class ExotikDiceConfig extends FormApplication {
 
                         // Upload to the target subfolder
                         const targetDir = `${basePath}/${subfolder}`;
-                        const result = await FilePicker.upload("data", targetDir, file, {});
+                        const result = await FP.upload("data", targetDir, file, {});
                         if (result?.path) {
                             face[field] = result.path;
                         }

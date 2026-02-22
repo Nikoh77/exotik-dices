@@ -22,6 +22,9 @@ import { exportDice, autoImportDice } from "./dicePorting.js";
 const MODULE_ID = "exotik-dices";
 const ASSETS_PATH = `modules/${MODULE_ID}/assets`;
 
+/** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
+const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
+
 /**
  * Asset folder convention per dice:
  *   assets/dices/<dice_slug>/textures/   → 3D face textures (PNG)
@@ -522,7 +525,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     ];
                     for (const folderPath of possiblePaths) {
                         try {
-                            await FilePicker.browse("data", folderPath).then(
+                            await FP.browse("data", folderPath).then(
                                 async (result) => {
                                     for (const file of result.files || []) {
                                         try {
@@ -545,7 +548,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                                     }
                                     for (const dir of result.dirs || []) {
                                         try {
-                                            const sub = await FilePicker.browse(
+                                            const sub = await FP.browse(
                                                 "data",
                                                 dir,
                                             );
@@ -627,8 +630,12 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     dice3d.addSystem({ id: "ekd", name: "Exotik Dices" }, false);
 
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+    const factory = dice3d.DiceFactory;
 
-    // Register DSN presets (resolving face references)
+    // Register DSN presets (resolving face references).
+    // We create DicePreset objects manually instead of using dice3d.addDicePreset()
+    // because that method crashes on custom denominations not registered in
+    // CONFIG.Dice.terms (it tries CONFIG.Dice.terms[denominator].name).
     for (const def of definitions) {
         const labels = def.faceMap.map((_, i) => {
             const r = resolveFace(def.faceMap, i);
@@ -639,27 +646,50 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             return r?.bump || "";
         });
         const dsnGeo = getDSNGeometryType(def.faces);
+        const diceType = `d${def.denomination}`;
 
-        dice3d.addDicePreset(
-            {
-                type: `d${def.denomination}`,
-                labels,
-                bumpMaps,
-                system: "ekd",
-            },
-            dsnGeo,
-        );
+        try {
+            // Get the standard model for this geometric shape
+            const standardModel = factory.systems
+                .get("standard")
+                .dice.get(dsnGeo);
+            if (!standardModel) {
+                console.warn(
+                    `${MODULE_ID} | No standard model for ${dsnGeo}, skipping ${diceType}`,
+                );
+                continue;
+            }
 
-        console.log(
-            `${MODULE_ID} | DSN preset registered: d${def.denomination} as ${dsnGeo}`,
-        );
+            const DicePreset = standardModel.constructor;
+            const preset = new DicePreset(diceType, standardModel.shape);
+            preset.term = "Die";
+            preset.setLabels(labels);
+            if (bumpMaps.some((b) => b)) preset.setBumpMaps(bumpMaps);
+            preset.values = standardModel.values;
+            preset.valueMap = standardModel.valueMap;
+            preset.mass = standardModel.mass;
+            preset.scale = standardModel.scale;
+            preset.inertia = standardModel.inertia;
+            preset.system = "ekd";
+
+            factory.register(preset);
+
+            console.log(
+                `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo}`,
+            );
+        } catch (err) {
+            console.warn(
+                `${MODULE_ID} | Failed to register DSN preset for ${diceType}:`,
+                err,
+            );
+        }
     }
 
     // ── Dynamic geometry swap ──
     // Scan geometries folder for .glb files
     let customGeoFiles;
     try {
-        const result = await FilePicker.browse("data", GEOMETRIES_PATH);
+        const result = await FP.browse("data", GEOMETRIES_PATH);
         customGeoFiles = new Map();
         for (const fp of result.files || []) {
             if (!fp.endsWith(".glb")) continue;
@@ -735,4 +765,4 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(
         `${MODULE_ID} | Geometry swap installed for: ${[...denomToGeo.keys()].join(", ")}`,
     );
-};);
+});

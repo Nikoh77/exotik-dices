@@ -13,6 +13,10 @@
 import { zipSync } from "./vendor/fflate.min.js";
 
 const MODULE_ID = "exotik-dices";
+
+/** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
+const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
+
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
 const USER_DICES_PATH = `${MODULE_ID}/dices`;
 
@@ -26,7 +30,7 @@ const USER_DICES_PATH = `${MODULE_ID}/dices`;
  * @returns {Promise<string[]>}
  */
 async function collectFiles(dir) {
-    const result = await FilePicker.browse("data", dir);
+    const result = await FP.browse("data", dir);
     let files = [...(result.files || [])];
     for (const sub of result.dirs || []) {
         files = files.concat(await collectFiles(sub));
@@ -58,7 +62,7 @@ export async function exportDice(diceDef) {
     // Determine base path: try user data first, then module assets
     let basePath;
     try {
-        await FilePicker.browse("data", `${USER_DICES_PATH}/${slug}`);
+        await FP.browse("data", `${USER_DICES_PATH}/${slug}`);
         basePath = `${USER_DICES_PATH}/${slug}`;
     } catch {
         basePath = `${DICES_PATH}/${slug}`;
@@ -154,7 +158,7 @@ export async function autoImportDice() {
 
     for (const scanPath of dirsToScan) {
         try {
-            const result = await FilePicker.browse("data", scanPath);
+            const result = await FP.browse("data", scanPath);
             for (const dir of result.dirs || []) {
                 allSubDirs.push(dir);
             }
@@ -179,7 +183,7 @@ export async function autoImportDice() {
         // Look for dice.json in this folder
         let folderResult;
         try {
-            folderResult = await FilePicker.browse("data", dir);
+            folderResult = await FP.browse("data", dir);
         } catch {
             continue;
         }
