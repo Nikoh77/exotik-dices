@@ -745,12 +745,12 @@ export class ExotikDiceConfig extends FormApplication {
                 this._previewMesh = null;
             }
 
-            // ── Ensure preview system exists ──
+            // ── Ensure preview system exists (hidden from DSN dropdown) ──
             const previewSystem = "ekd-preview";
             if (!factory.systems.has(previewSystem)) {
                 factory.addSystem(
                     { id: previewSystem, name: "EKD Preview" },
-                    "default",
+                    false,
                 );
             }
 
