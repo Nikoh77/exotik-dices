@@ -18,7 +18,19 @@ const MODULE_ID = "exotik-dices";
 const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
 
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
-const USER_DICES_PATH = `${MODULE_ID}/dices`;
+const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
+
+/** Runtime accessor for the user-configurable dice data path. */
+function getUserDicePath() {
+    try {
+        return (
+            game.settings.get(MODULE_ID, "diceDataPath") ||
+            DEFAULT_USER_DICES_PATH
+        );
+    } catch {
+        return DEFAULT_USER_DICES_PATH;
+    }
+}
 
 /* ──────────────────────────────────────────── */
 /*  Export                                       */
@@ -62,8 +74,8 @@ export async function exportDice(diceDef) {
     // Determine base path: try user data first, then module assets
     let basePath;
     try {
-        await FP.browse("data", `${USER_DICES_PATH}/${slug}`);
-        basePath = `${USER_DICES_PATH}/${slug}`;
+        await FP.browse("data", `${getUserDicePath()}/${slug}`);
+        basePath = `${getUserDicePath()}/${slug}`;
     } catch {
         basePath = `${DICES_PATH}/${slug}`;
     }
@@ -153,7 +165,7 @@ export async function exportDice(diceDef) {
  */
 export async function autoImportDice() {
     // Scan both module assets and user data folders
-    const dirsToScan = [DICES_PATH, USER_DICES_PATH];
+    const dirsToScan = [DICES_PATH, getUserDicePath()];
     const allSubDirs = [];
 
     for (const scanPath of dirsToScan) {

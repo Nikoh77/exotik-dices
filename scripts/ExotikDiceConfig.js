@@ -14,8 +14,17 @@ const MODULE_ID = "exotik-dices";
 const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
 
 const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
-const USER_DICES_PATH = `${MODULE_ID}/dices`;
+const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
 const GEOMETRIES_PATH = `modules/${MODULE_ID}/assets/geometries`;
+
+/** Runtime accessor for the user-configurable dice data path. */
+function getUserDicePath() {
+    try {
+        return game.settings.get(MODULE_ID, "diceDataPath") || DEFAULT_USER_DICES_PATH;
+    } catch {
+        return DEFAULT_USER_DICES_PATH;
+    }
+}
 
 /** Supported face counts */
 const FACE_OPTIONS = [4, 6, 8, 10, 12, 20];
@@ -33,7 +42,7 @@ function nameToSlug(name) {
 
 /** Build the conventional asset base path (user data, outside modules/). */
 function diceBasePath(slug) {
-    return `${USER_DICES_PATH}/${slug}`;
+    return `${getUserDicePath()}/${slug}`;
 }
 
 /**
@@ -68,10 +77,16 @@ function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
 
 /** Create asset sub-folders for a dice on the server. */
 async function ensureDiceFolders(slug) {
-    const base = `${MODULE_ID}/dices/${slug}`;
+    const userPath = getUserDicePath();
+    const base = `${userPath}/${slug}`;
+    // Ensure intermediate directories exist
+    const parts = userPath.split("/");
+    const intermediateDirs = [];
+    for (let i = 1; i <= parts.length; i++) {
+        intermediateDirs.push(parts.slice(0, i).join("/"));
+    }
     const dirs = [
-        MODULE_ID,
-        `${MODULE_ID}/dices`,
+        ...intermediateDirs,
         base,
         `${base}/textures`,
         `${base}/bump_maps`,
@@ -542,7 +557,7 @@ export class ExotikDiceConfig extends FormApplication {
         if (dice.slug) {
             // Check both user and module paths
             const possiblePaths = [
-                `${USER_DICES_PATH}/${dice.slug}`,
+                `${getUserDicePath()}/${dice.slug}`,
                 `${DICES_PATH}/${dice.slug}`,
             ];
             for (const folderPath of possiblePaths) {
@@ -677,9 +692,27 @@ export class ExotikDiceConfig extends FormApplication {
 
             // Boost lighting for better visibility
             if (box.scene) {
+                // Increase all existing lights significantly
+                const lights = [];
                 box.scene.traverse((obj) => {
-                    if (obj.isLight) obj.intensity *= 2.5;
+                    if (obj.isLight) {
+                        obj.intensity *= 4;
+                        lights.push(obj);
+                    }
                 });
+                // Clone the brightest directional light and point it from the
+                // opposite side so no face stays dark while rotating.
+                const dirLight = lights.find((l) => l.isDirectionalLight);
+                if (dirLight) {
+                    const fill = dirLight.clone();
+                    fill.position.set(
+                        -dirLight.position.x,
+                        dirLight.position.y,
+                        -dirLight.position.z,
+                    );
+                    fill.intensity = dirLight.intensity * 0.6;
+                    box.scene.add(fill);
+                }
             }
 
             // Build and show the die
@@ -898,9 +931,11 @@ export class ExotikDiceConfig extends FormApplication {
      */
     _refreshDSNPreview() {
         if (this._previewRefreshTimer) clearTimeout(this._previewRefreshTimer);
-        this._previewRefreshTimer = setTimeout(() => {
+        this._previewRefreshTimer = setTimeout(async () => {
             this._captureFormData();
-            this._renderPreviewDie();
+            await this._renderPreviewDie();
+            // Restart animation (it stops when the mesh is replaced)
+            this._startPreviewAnimation();
         }, 300);
     }
 
@@ -1095,7 +1130,7 @@ export class ExotikDiceConfig extends FormApplication {
 
         // ── Copy asset files into the dice folder ──
         if (diceDef.slug) {
-            const basePath = `${USER_DICES_PATH}/${diceDef.slug}`;
+            const basePath = `${getUserDicePath()}/${diceDef.slug}`;
             const subfolders = { texture: "textures", bump: "bump_maps", icon: "chat_2d" };
 
             for (let i = 0; i < diceDef.faceMap.length; i++) {

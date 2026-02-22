@@ -7,7 +7,10 @@
             "DiceDefinitions": "Dice Definitions",
             "ConfigureDice": "Configure Exotik Dices",
             "ConfigureLabel": "Configure",
-            "ConfigureHint": "Create and customize your exotic dice."
+            "ConfigureHint": "Create and customize your exotic dice.",
+            "DiceDataPath": "Dice Data Folder",
+            "DiceDataPathHint": "Folder where user-created dice assets are saved. Change this if you want to store them elsewhere.",
+            "DiceDataPathSaved": "Dice data path updated to: {path}"
         },
 
         "Config": {

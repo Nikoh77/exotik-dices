@@ -33,8 +33,17 @@ const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
  *   assets/geometries/                   → Shared 3D geometries (GLB)
  */
 const DICES_PATH = `${ASSETS_PATH}/dices`;
-const USER_DICES_PATH = `${MODULE_ID}/dices`;
+const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
 const GEOMETRIES_PATH = `${ASSETS_PATH}/geometries`;
+
+/** Runtime accessor for the user-configurable dice data path. */
+function getUserDicePath() {
+    try {
+        return game.settings.get(MODULE_ID, "diceDataPath") || DEFAULT_USER_DICES_PATH;
+    } catch {
+        return DEFAULT_USER_DICES_PATH;
+    }
+}
 
 /** Default dice shipped with the module ("Come quando fuori piove") */
 const DEFAULT_DICE_PATH = `${DICES_PATH}/come_quando_fuori_piove`;
@@ -167,6 +176,15 @@ function registerSettings() {
         config: false,
         type: Array,
         default: DEFAULT_DICE,
+    });
+
+    game.settings.register(MODULE_ID, "diceDataPath", {
+        name: "EKD.Settings.DiceDataPath",
+        hint: "EKD.Settings.DiceDataPathHint",
+        scope: "world",
+        config: false,
+        type: String,
+        default: DEFAULT_USER_DICES_PATH,
     });
 
     game.settings.register(MODULE_ID, "schemaVersion", {
@@ -370,9 +388,8 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         root = renderArgs[0][0];
     }
     if (!root) {
-        root = app.element instanceof HTMLElement
-            ? app.element
-            : app.element?.[0];
+        root =
+            app.element instanceof HTMLElement ? app.element : app.element?.[0];
     }
     if (!root) return;
 
@@ -409,8 +426,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     if (!submenu) return;
 
     // Build injected HTML
-    const definitions =
-        game.settings.get(MODULE_ID, "diceDefinitions") || [];
+    const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     const t = {
         hint: game.i18n.localize("EKD.Config.Hint"),
         hintNote: game.i18n.localize("EKD.Config.HintNote"),
@@ -436,6 +452,19 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     listHtml += `</div>`;
     listHtml += `<p class="notes ekd-hint-main">${t.hint}</p>`;
     listHtml += `<p class="notes ekd-hint-note">${t.hintNote}</p>`;
+
+    // Dice data path with browse button
+    const currentPath = getUserDicePath();
+    listHtml += `<div class="form-group ekd-path-group">
+            <label>${game.i18n.localize("EKD.Settings.DiceDataPath")}</label>
+            <div class="form-fields">
+                <input type="text" class="ekd-path-input" value="${currentPath}" />
+                <button type="button" class="ekd-path-browse file-picker" title="Browse">
+                    <i class="fas fa-folder-open"></i>
+                </button>
+            </div>
+            <p class="notes">${game.i18n.localize("EKD.Settings.DiceDataPathHint")}</p>
+        </div>`;
     listHtml += `<div class="ekd-settings-buttons">
             <button type="button" class="ekd-settings-add">
                 <i class="fas fa-plus"></i> ${t.addDice}
@@ -509,7 +538,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             const dice = definitions.find((d) => d.id === id);
             if (!dice) return;
             if (dice.id === "ekd-default-combat") {
-                ui.notifications.warn(game.i18n.localize("EKD.Config.DefaultProtected"));
+                ui.notifications.warn(
+                    game.i18n.localize("EKD.Config.DefaultProtected"),
+                );
                 return;
             }
             Dialog.confirm({
@@ -520,15 +551,11 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                 const updated = (
                     game.settings.get(MODULE_ID, "diceDefinitions") || []
                 ).filter((d) => d.id !== id);
-                await game.settings.set(
-                    MODULE_ID,
-                    "diceDefinitions",
-                    updated,
-                );
+                await game.settings.set(MODULE_ID, "diceDefinitions", updated);
                 // Try to remove the dice asset folder
                 if (dice.slug) {
                     const possiblePaths = [
-                        `${USER_DICES_PATH}/${dice.slug}`,
+                        `${getUserDicePath()}/${dice.slug}`,
                         `${DICES_PATH}/${dice.slug}`,
                     ];
                     for (const folderPath of possiblePaths) {
@@ -627,7 +654,43 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     ui.notifications.warn("README.md not found.");
                 });
         }
+
+        if (target.closest(".ekd-path-browse")) {
+            event.preventDefault();
+            const pathInput = injected.querySelector(".ekd-path-input");
+            const current = pathInput?.value || getUserDicePath();
+            new FP({
+                type: "folder",
+                current,
+                callback: async (path) => {
+                    if (pathInput) pathInput.value = path;
+                    await game.settings.set(MODULE_ID, "diceDataPath", path);
+                    ui.notifications.info(
+                        game.i18n.format("EKD.Settings.DiceDataPathSaved", {
+                            path,
+                        }),
+                    );
+                },
+            }).render(true);
+        }
     });
+
+    // Save path on blur/enter
+    const pathInput = injected.querySelector(".ekd-path-input");
+    if (pathInput) {
+        const savePath = async () => {
+            const newPath = pathInput.value.trim();
+            if (newPath && newPath !== getUserDicePath()) {
+                await game.settings.set(MODULE_ID, "diceDataPath", newPath);
+                ui.notifications.info(
+                    game.i18n.format("EKD.Settings.DiceDataPathSaved", {
+                        path: newPath,
+                    }),
+                );
+            }
+        };
+        pathInput.addEventListener("change", savePath);
+    }
 });
 
 Hooks.once("diceSoNiceReady", async (dice3d) => {

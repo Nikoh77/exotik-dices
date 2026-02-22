@@ -7,7 +7,10 @@
             "DiceDefinitions": "Definizioni Dadi",
             "ConfigureDice": "Configura Exotik Dices",
             "ConfigureLabel": "Configura",
-            "ConfigureHint": "Crea e personalizza i tuoi dadi esotici."
+            "ConfigureHint": "Crea e personalizza i tuoi dadi esotici.",
+            "DiceDataPath": "Cartella Dati Dadi",
+            "DiceDataPathHint": "Cartella in cui vengono salvati gli asset dei dadi creati. Modificala se vuoi salvarli altrove.",
+            "DiceDataPathSaved": "Percorso dati dadi aggiornato a: {path}"
         },
 
         "Config": {

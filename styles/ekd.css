@@ -357,3 +357,29 @@
     font-size: 12px;
     cursor: pointer;
 }
+
+/* ── Dice data path setting ────────────────── */
+
+.ekd-path-group {
+    margin: 8px 0;
+}
+
+.ekd-path-group label {
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.ekd-path-group .form-fields {
+    display: flex;
+    gap: 4px;
+}
+
+.ekd-path-group .ekd-path-input {
+    flex: 1;
+    font-size: 12px;
+}
+
+.ekd-path-group .ekd-path-browse {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+}
