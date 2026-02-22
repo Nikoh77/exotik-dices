@@ -691,7 +691,10 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
             preset.inertia = standardModel.inertia;
             preset.system = "ekd";
 
-            factory.register(preset);
+            // Add only to the "ekd" system (hidden from DSN dropdown).
+            // Using factory.register() would add to ALL systems, making
+            // our presets appear in DSN's configuration UI.
+            factory.systems.get("ekd").dice.set(diceType, preset);
 
             console.log(
                 `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo}`,

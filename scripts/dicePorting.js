@@ -272,6 +272,18 @@ export async function autoImportDice() {
         console.log(
             `${MODULE_ID} | autoImport: imported "${diceDef.name}" from ${slug}/dice.json`,
         );
+
+        // Delete dice.json so it won't be re-imported on next startup
+        try {
+            await fetch(window.location.origin + "/api/files", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: diceJsonPath, source: "data" }),
+            });
+            console.log(`${MODULE_ID} | autoImport: deleted ${diceJsonPath}`);
+        } catch (e) {
+            console.warn(`${MODULE_ID} | autoImport: could not delete ${diceJsonPath}`, e);
+        }
     }
 
     if (imported > 0) {
