@@ -113,29 +113,6 @@ async function ensureDiceFolders(slug) {
 
 /* ─── Exported helpers ─── */
 
-/** Show the reload-world dialog. */
-export function promptReload() {
-    const d = new Dialog({
-        title: game.i18n.localize("EKD.Config.ReloadRequired"),
-        content: `<p>${game.i18n.localize("EKD.Config.ReloadRequiredMsg")}</p>`,
-        buttons: {
-            reload: {
-                icon: '<i class="fas fa-sync"></i>',
-                label: game.i18n.localize("EKD.Config.ReloadNow"),
-                callback: () => window.location.reload(),
-            },
-            later: {
-                icon: '<i class="fas fa-clock"></i>',
-                label: game.i18n.localize("EKD.Config.ReloadLater"),
-            },
-        },
-        default: "reload",
-    });
-    d.render(true);
-    // Bring to front after a tick so it appears above the settings window
-    setTimeout(() => d.bringToTop?.(), 100);
-}
-
 /** Simple markdown → HTML for README display. */
 export function markdownToHtml(md) {
     return md
@@ -1115,7 +1092,7 @@ export class ExotikDiceConfig extends FormApplication {
             this._editingDice = null;
             this.render(true);
         }
-        promptReload();
+        Hooks.callAll("ekdDiceChanged");
     }
 
     /* ── Helpers ── */

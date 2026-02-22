@@ -345,11 +345,10 @@
 }
 
 .ekd-folder-hints {
-    background: rgba(0, 0, 0, 0.06);
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.15);
     border-radius: 4px;
     padding: 6px 10px;
-    margin-bottom: 8px;
+    margin: 10px 0;
 }
 
 .ekd-folder-hints p.notes {

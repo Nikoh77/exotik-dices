@@ -8,7 +8,6 @@
 
 import {
     ExotikDiceConfig,
-    promptReload,
     markdownToHtml,
     resolveFace,
 } from "./ExotikDiceConfig.js";
@@ -51,6 +50,9 @@ function getUserDicePath() {
 
 /** @type {Map<string, object>}  denomination -> dice definition */
 const _diceDefinitions = new Map();
+
+/** Set of dice types we own (e.g. "dh", "dc") — shared with DSN monkey-patch. */
+const _ekdDiceTypes = new Set();
 
 /* ---------------------------------------- */
 /*  Dynamic Dice Class Factory               */
@@ -106,6 +108,62 @@ function createDiceClass(def) {
 function getDSNGeometryType(faces) {
     const map = { 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12", 20: "d20" };
     return map[faces] || "d6";
+}
+
+/**
+ * Register (or re-register) dice classes and DSN presets on the fly,
+ * without requiring a page reload.  Handles additions, modifications,
+ * and removals compared to the previous _diceDefinitions state.
+ *
+ * @param {object[]} definitions  Up-to-date array of dice definitions
+ */
+function registerDiceOnTheFly(definitions) {
+    const oldDenoms = new Set(_diceDefinitions.keys());
+
+    _diceDefinitions.clear();
+    for (const def of definitions) {
+        _diceDefinitions.set(def.denomination, def);
+        const DiceClass = createDiceClass(def);
+        CONFIG.Dice.terms[DiceClass.name] = DiceClass;
+        CONFIG.Dice.terms[def.denomination] = DiceClass;
+
+        const diceType = `d${def.denomination}`;
+        _ekdDiceTypes.add(diceType);
+
+        // If DSN is already initialised, register / update the preset
+        if (game.dice3d) {
+            try {
+                const labels = def.faceMap.map((_, i) =>
+                    resolveFace(def.faceMap, i)?.texture || "",
+                );
+                const bumpMaps = def.faceMap.map((_, i) =>
+                    resolveFace(def.faceMap, i)?.bump || "",
+                );
+                const presetData = {
+                    type: diceType,
+                    labels,
+                    system: "ekd",
+                };
+                if (bumpMaps.some((b) => b)) presetData.bumpMaps = bumpMaps;
+                game.dice3d.addDicePreset(presetData, getDSNGeometryType(def.faces));
+            } catch (err) {
+                console.warn(`${MODULE_ID} | on-the-fly DSN preset error for ${diceType}:`, err);
+            }
+        }
+
+        oldDenoms.delete(def.denomination);
+        console.log(
+            `${MODULE_ID} | Registered dice: d${def.denomination} - "${def.name}"`,
+        );
+    }
+
+    // Clean up dice that were removed from the filesystem
+    for (const denom of oldDenoms) {
+        delete CONFIG.Dice.terms[`ExotikDice_${denom}`];
+        delete CONFIG.Dice.terms[denom];
+        _ekdDiceTypes.delete(`d${denom}`);
+        console.log(`${MODULE_ID} | Unregistered dice: d${denom}`);
+    }
 }
 
 /* ---------------------------------------- */
@@ -247,31 +305,11 @@ Hooks.once("ready", () => {
 
     // ── Filesystem -> DB sync ──
     // Scans all dice folders for dice.json files and updates the DB cache.
-    // On first startup (empty cache) we register classes on the fly so
-    // no reload is needed.  On subsequent startups we only prompt reload
-    // when the set of registered dice actually differs from what the FS has.
-    const cacheBeforeSync = game.settings.get(MODULE_ID, "diceDefinitions") || [];
-    const wasCacheEmpty = cacheBeforeSync.length === 0;
-
+    // When changes are detected, dice classes and DSN presets are
+    // registered on the fly — no page reload is ever required.
     syncDiceFromFilesystem().then(({ changed, definitions }) => {
         if (!changed) return;
-
-        if (wasCacheEmpty) {
-            // First startup: register dice classes on the fly — no reload.
-            for (const def of definitions) {
-                if (_diceDefinitions.has(def.denomination)) continue;
-                _diceDefinitions.set(def.denomination, def);
-                const DiceClass = createDiceClass(def);
-                CONFIG.Dice.terms[DiceClass.name] = DiceClass;
-                CONFIG.Dice.terms[def.denomination] = DiceClass;
-                console.log(
-                    `${MODULE_ID} | Late-registered dice: d${def.denomination} - "${def.name}"`,
-                );
-            }
-        } else {
-            // Cache existed but FS diverged → need reload to re-register
-            promptReload();
-        }
+        registerDiceOnTheFly(definitions);
     }).catch((err) => {
         console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
     });
@@ -457,15 +495,18 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 
         if (target.closest(".ekd-settings-refresh")) {
             event.preventDefault();
-            syncDiceFromFilesystem().then(({ changed }) => {
-                app.render(true);
+            syncDiceFromFilesystem().then(({ changed, definitions }) => {
                 if (changed) {
-                    promptReload();
+                    registerDiceOnTheFly(definitions);
+                    ui.notifications.info(
+                        game.i18n.localize("EKD.Import.Synced"),
+                    );
                 } else {
                     ui.notifications.info(
                         game.i18n.localize("EKD.Import.NoneFound"),
                     );
                 }
+                app.render(true);
             }).catch((err) => {
                 console.error(`${MODULE_ID} | sync error:`, err);
                 ui.notifications.error("Sync failed - see console.");
@@ -531,6 +572,12 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 /*  Dice So Nice Integration                 */
 /* ---------------------------------------- */
 
+// When the editor saves a dice, re-register from the updated DB cache.
+Hooks.on("ekdDiceChanged", () => {
+    const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+    registerDiceOnTheFly(definitions);
+});
+
 Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
@@ -539,9 +586,6 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
 
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     const factory = dice3d.DiceFactory;
-
-    // Set of dice types we own (e.g. "dh", "dc") - used by the create patch.
-    const ekdDiceTypes = new Set();
 
     // ── Register DSN presets via official API ──
     for (const def of definitions) {
@@ -572,7 +616,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
 
             dice3d.addDicePreset(presetData, dsnGeo);
 
-            ekdDiceTypes.add(diceType);
+            _ekdDiceTypes.add(diceType);
             console.log(
                 `${MODULE_ID} | DSN preset registered: ${diceType} as ${dsnGeo} (system: ekd)`,
             );
@@ -644,11 +688,11 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     // system registration, so we no longer need to force system override.
     // However, we still force system="ekd" at render time to ensure our
     // textures are always used regardless of user's selected DSN system.
-    if (ekdDiceTypes.size > 0 || denomToGeo.size > 0) {
+    if (_ekdDiceTypes.size > 0 || denomToGeo.size > 0) {
         const origCreate = factory.create.bind(factory);
         factory.create = async function (t, i, r) {
             // Force our dice to resolve from the "ekd" system
-            if (ekdDiceTypes.has(i) && r) {
+            if (_ekdDiceTypes.has(i) && r) {
                 r = Object.assign({}, r, { system: "ekd" });
             }
 
@@ -674,7 +718,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
 
         console.log(
             `${MODULE_ID} | DiceFactory.create patched` +
-            (ekdDiceTypes.size ? ` - system override: [${[...ekdDiceTypes].join(", ")}]` : "") +
+            (_ekdDiceTypes.size ? ` - system override: [${[..._ekdDiceTypes].join(", ")}]` : "") +
             (denomToGeo.size ? ` - geometry swap: [${[...denomToGeo.keys()].join(", ")}]` : ""),
         );
     }

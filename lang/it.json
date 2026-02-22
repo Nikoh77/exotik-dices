@@ -24,17 +24,13 @@
             "DeleteConfirm": "Sei sicuro di voler eliminare \"{name}\"?",
             "DeleteFolderHint": "La cartella del dado resterà su disco. Rimuovila manualmente per completare l'eliminazione.",
             "DiceSaved": "Dado \"{name}\" salvato.",
-            "ReloadRequired": "Ricaricamento Necessario",
-            "ReloadRequiredMsg": "La configurazione dei dadi è cambiata. È necessario ricaricare il mondo per applicare le modifiche.",
-            "ReloadNow": "Ricarica Ora",
-            "ReloadLater": "Dopo",
             "README": "README",
             "HintNote": "Attenzione: con questo modulo non \u00e8 possibile creare dadi standard a numerazione (per cui esiste gi\u00e0 l\u2019ottimo Dice So Nice), ma solo dadi con simboli. I risultati vengono raggruppati per tipo, ad es. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660.",
             "Export": "Esporta",
             "Refresh": "Aggiorna dadi",
             "DefaultProtected": "Il dado predefinito non può essere eliminato.",
-            "FolderAddHint": "<strong>Aggiungere dadi:</strong> crea una sottocartella contenente un <code>dice.json</code> in <code>{path}</code>, quindi clicca Aggiorna o ricarica il mondo.",
-            "FolderRemoveHint": "<strong>Rimuovere dadi:</strong> elimina la sottocartella corrispondente da <code>{path}</code>, quindi ricarica il mondo."
+            "FolderAddHint": "<strong>Aggiungere dadi:</strong> crea una sottocartella contenente un <code>dice.json</code> in <code>{path}</code>, quindi clicca Aggiorna.",
+            "FolderRemoveHint": "<strong>Rimuovere dadi:</strong> elimina la sottocartella corrispondente da <code>{path}</code>, quindi clicca Aggiorna."
         },
 
         "Export": {
@@ -44,6 +40,7 @@
 
         "Import": {
             "Success": "{count} dado/i sincronizzato/i dal filesystem.",
+            "Synced": "Dadi aggiornati dal filesystem.",
             "NoneFound": "Filesystem e cache sono sincronizzati. Nessuna modifica rilevata.",
             "DenomConflict": "Impossibile caricare \"{name}\": la denominazione \"{denom}\" è già usata da \"{existing}\"."
         },
