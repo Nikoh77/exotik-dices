@@ -940,10 +940,23 @@ export class ExotikDiceConfig extends FormApplication {
             );
             throw new Error("Validation failed");
         }
-        // Check against CONFIG.Dice.terms (Foundry core + other modules)
-        const externalTerms = new Set(Object.keys(CONFIG.Dice.terms || {}));
-        for (const def of currentDefs) externalTerms.delete(def.denomination);
-        if (externalTerms.has(denom)) {
+        // Check against CONFIG.Dice.terms (Foundry core + other modules).
+        // In v13 CONFIG.Dice.terms keys are class names, so we also check the
+        // DENOMINATION static property on each registered class.
+        const reservedDenoms = new Set();
+        for (const [key, cls] of Object.entries(CONFIG.Dice.terms || {})) {
+            // Add the key itself (covers v12 denomination keys)
+            reservedDenoms.add(key);
+            // Add the DENOMINATION property (covers v13 class-name keys)
+            if (cls?.DENOMINATION) reservedDenoms.add(cls.DENOMINATION);
+        }
+        // Remove our own registered denominations so editing an existing dice
+        // doesn't block itself
+        for (const def of currentDefs) {
+            reservedDenoms.delete(def.denomination);
+            reservedDenoms.delete(`ExotikDice_${def.denomination}`);
+        }
+        if (reservedDenoms.has(denom)) {
             ui.notifications.error(
                 game.i18n.format("EKD.Validation.DenominationReserved", {
                     denom,

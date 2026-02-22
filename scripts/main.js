@@ -255,15 +255,23 @@ function buildChatSummary(rolls) {
 Hooks.once("init", () => {
     registerSettings();
 
-    // Load dice definitions and register Die subclasses
+    // Load dice definitions and register Die subclasses.
+    // In Foundry v13 CONFIG.Dice.terms uses class names as keys (e.g. "Die",
+    // "Coin"). Registration by denomination still works for some lookups, but
+    // we also register by class name so that DiceTerm.fromParseNode / fromData
+    // can find our class when reconstructing rolls from serialised chat data.
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
 
     for (const def of definitions) {
         _diceDefinitions.set(def.denomination, def);
         const DiceClass = createDiceClass(def);
+
+        // Register by class name (v13 primary key) AND by denomination (compat)
+        CONFIG.Dice.terms[DiceClass.name] = DiceClass;
         CONFIG.Dice.terms[def.denomination] = DiceClass;
+
         console.log(
-            `${MODULE_ID} | Registered dice: d${def.denomination} – "${def.name}" (${def.faces} faces)`,
+            `${MODULE_ID} | Registered dice: d${def.denomination} – "${def.name}" (${def.faces} faces, class=${DiceClass.name})`,
         );
     }
 });
