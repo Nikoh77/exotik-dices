@@ -27,7 +27,8 @@
             "README": "README",
             "HintNote": "Note: this module creates symbol dice only (not standard numbered dice, for which Dice So Nice already works great). Results are grouped by type, e.g. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660.",
             "Export": "Export",
-            "Refresh": "Refresh dice"
+            "Refresh": "Refresh dice",
+            "DefaultProtected": "The default dice cannot be deleted."
         },
 
         "Export": {

@@ -360,6 +360,7 @@ export class ExotikDiceConfig extends FormApplication {
             const geo = allGeos.find((g) => g.value === d.geometry);
             return {
                 ...d,
+                isDefault: d.id === "ekd-default-combat",
                 geometryLabel: geo
                     ? geo.name
                     : game.i18n.localize("EKD.Editor.GeometryStandard"),
@@ -508,6 +509,10 @@ export class ExotikDiceConfig extends FormApplication {
         const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = defs.find((d) => d.id === id);
         if (!dice) return;
+        if (dice.id === "ekd-default-combat") {
+            ui.notifications.warn(game.i18n.localize("EKD.Config.DefaultProtected"));
+            return;
+        }
         const confirmed = await Dialog.confirm({
             title: game.i18n.localize("EKD.Config.Delete"),
             content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`,
@@ -515,6 +520,28 @@ export class ExotikDiceConfig extends FormApplication {
         if (!confirmed) return;
         const updated = defs.filter((d) => d.id !== id);
         await game.settings.set(MODULE_ID, "diceDefinitions", updated);
+        // Try to remove the dice asset folder
+        if (dice.slug) {
+            try {
+                const folderPath = `${DICES_PATH}/${dice.slug}`;
+                await FilePicker.browse("data", folderPath).then(async (result) => {
+                    for (const file of result.files || []) {
+                        try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: file, source: "data" }) }); } catch {}
+                    }
+                    for (const dir of result.dirs || []) {
+                        try {
+                            const sub = await FilePicker.browse("data", dir);
+                            for (const f of sub.files || []) {
+                                try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: f, source: "data" }) }); } catch {}
+                            }
+                        } catch {}
+                    }
+                });
+                console.log(`${MODULE_ID} | Deleted asset folder: ${folderPath}`);
+            } catch (err) {
+                console.warn(`${MODULE_ID} | Could not delete asset folder for "${dice.name}":`, err);
+            }
+        }
         this.render(true);
         promptReload();
     }

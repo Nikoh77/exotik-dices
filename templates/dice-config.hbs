@@ -188,9 +188,11 @@
                 <a class="ekd-edit" data-id="{{this.id}}" title="{{localize 'EKD.Config.Edit'}}">
                     <i class="fas fa-edit"></i>
                 </a>
+                {{#unless this.isDefault}}
                 <a class="ekd-delete" data-id="{{this.id}}" title="{{localize 'EKD.Config.Delete'}}">
                     <i class="fas fa-trash"></i>
                 </a>
+                {{/unless}}
             </div>
         </li>
         {{/each}}

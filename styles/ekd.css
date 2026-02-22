@@ -135,7 +135,10 @@
 .ekd-config .ekd-config-buttons,
 .ekd-settings-buttons {
     margin-top: 8px;
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 /* ============================================= */

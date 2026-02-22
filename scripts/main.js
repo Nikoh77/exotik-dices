@@ -435,6 +435,10 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     if (definitions.length) {
         listHtml += `<ul class="ekd-settings-list">`;
         for (const d of definitions) {
+            const isDefault = d.id === "ekd-default-combat";
+            const deleteBtn = isDefault
+                ? ""
+                : `<a class="ekd-settings-delete" title="${t.del}"><i class="fas fa-trash"></i></a>`;
             listHtml += `
                 <li class="ekd-settings-entry flexrow" data-id="${d.id}">
                     <span class="ekd-settings-name flex2">${d.name}</span>
@@ -443,7 +447,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     <span class="ekd-settings-controls flex0">
                         <a class="ekd-settings-export" title="${t.exp}"><i class="fas fa-file-export"></i></a>
                         <a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>
-                        <a class="ekd-settings-delete" title="${t.del}"><i class="fas fa-trash"></i></a>
+                        ${deleteBtn}
                     </span>
                 </li>`;
         }
@@ -482,6 +486,10 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             const id = target.closest("[data-id]")?.dataset.id;
             const dice = definitions.find((d) => d.id === id);
             if (!dice) return;
+            if (dice.id === "ekd-default-combat") {
+                ui.notifications.warn(game.i18n.localize("EKD.Config.DefaultProtected"));
+                return;
+            }
             Dialog.confirm({
                 title: game.i18n.localize("EKD.Config.Delete"),
                 content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`,
@@ -495,6 +503,28 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     "diceDefinitions",
                     updated,
                 );
+                // Try to remove the dice asset folder
+                if (dice.slug) {
+                    try {
+                        const folderPath = `${DICES_PATH}/${dice.slug}`;
+                        await FilePicker.browse("data", folderPath).then(async (result) => {
+                            for (const file of result.files || []) {
+                                try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: file, source: "data" }) }); } catch {}
+                            }
+                            for (const dir of result.dirs || []) {
+                                try {
+                                    const sub = await FilePicker.browse("data", dir);
+                                    for (const f of sub.files || []) {
+                                        try { await fetch(window.location.origin + "/api/files", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: f, source: "data" }) }); } catch {}
+                                    }
+                                } catch {}
+                            }
+                        });
+                        console.log(`${MODULE_ID} | Deleted asset folder: ${folderPath}`);
+                    } catch (err) {
+                        console.warn(`${MODULE_ID} | Could not delete asset folder for "${dice.name}":`, err);
+                    }
+                }
                 app.render(true);
                 promptReload();
             });
