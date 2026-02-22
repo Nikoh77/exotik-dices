@@ -622,7 +622,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(`${MODULE_ID} | diceSoNiceReady fired`);
 
-    dice3d.addSystem({ id: "ekd", name: "Exotik Dices" }, "preferred");
+    // Register system without making it selectable in DSN's appearance dropdown.
+    // Our custom dice presets work regardless — they are tied to unique denominations.
+    dice3d.addSystem({ id: "ekd", name: "Exotik Dices" }, false);
 
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
 
@@ -733,4 +735,4 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
     console.log(
         `${MODULE_ID} | Geometry swap installed for: ${[...denomToGeo.keys()].join(", ")}`,
     );
-});
+};);
