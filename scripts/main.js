@@ -246,10 +246,32 @@ Hooks.once("ready", () => {
     }
 
     // ── Filesystem -> DB sync ──
-    // Scans all dice folders for dice.json files and updates the DB
-    // cache if anything changed.  Prompts reload when needed.
-    syncDiceFromFilesystem().then(({ changed }) => {
-        if (changed) promptReload();
+    // Scans all dice folders for dice.json files and updates the DB cache.
+    // On first startup (empty cache) we register classes on the fly so
+    // no reload is needed.  On subsequent startups we only prompt reload
+    // when the set of registered dice actually differs from what the FS has.
+    const cacheBeforeSync = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+    const wasCacheEmpty = cacheBeforeSync.length === 0;
+
+    syncDiceFromFilesystem().then(({ changed, definitions }) => {
+        if (!changed) return;
+
+        if (wasCacheEmpty) {
+            // First startup: register dice classes on the fly — no reload.
+            for (const def of definitions) {
+                if (_diceDefinitions.has(def.denomination)) continue;
+                _diceDefinitions.set(def.denomination, def);
+                const DiceClass = createDiceClass(def);
+                CONFIG.Dice.terms[DiceClass.name] = DiceClass;
+                CONFIG.Dice.terms[def.denomination] = DiceClass;
+                console.log(
+                    `${MODULE_ID} | Late-registered dice: d${def.denomination} - "${def.name}"`,
+                );
+            }
+        } else {
+            // Cache existed but FS diverged → need reload to re-register
+            promptReload();
+        }
     }).catch((err) => {
         console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
     });
@@ -334,7 +356,6 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         addDice: game.i18n.localize("EKD.Config.AddDice"),
         refresh: game.i18n.localize("EKD.Config.Refresh"),
         edit: game.i18n.localize("EKD.Config.Edit"),
-        del: game.i18n.localize("EKD.Config.Delete"),
         exp: game.i18n.localize("EKD.Config.Export"),
         faces: game.i18n.localize("EKD.Config.FacesLabel"),
         noDice: game.i18n.localize("EKD.Config.NoDice"),
@@ -375,6 +396,11 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             </button>
         </div>`;
     if (definitions.length) {
+        // Folder management instructions
+        listHtml += `<div class="ekd-folder-hints">`;
+        listHtml += `<p class="notes">${game.i18n.format("EKD.Config.FolderAddHint", { path: currentPath })}</p>`;
+        listHtml += `<p class="notes">${game.i18n.format("EKD.Config.FolderRemoveHint", { path: currentPath })}</p>`;
+        listHtml += `</div>`;
         listHtml += `<ul class="ekd-settings-list">`;
         for (const d of definitions) {
             // Dice shipped with the module (under modules/ path) are read-only
@@ -382,9 +408,6 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             const editBtn = isModuleDice
                 ? ""
                 : `<a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>`;
-            const deleteBtn = isModuleDice
-                ? ""
-                : `<a class="ekd-settings-delete" title="${t.del}"><i class="fas fa-trash"></i></a>`;
             listHtml += `
                 <li class="ekd-settings-entry flexrow" data-id="${d.id}">
                     <span class="ekd-settings-name flex2">${d.name}</span>
@@ -393,7 +416,6 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     <span class="ekd-settings-controls flex0">
                         <a class="ekd-settings-export" title="${t.exp}"><i class="fas fa-file-export"></i></a>
                         ${editBtn}
-                        ${deleteBtn}
                     </span>
                 </li>`;
         }
@@ -426,39 +448,6 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             const id = target.closest("[data-id]")?.dataset.id;
             const dice = definitions.find((d) => d.id === id);
             if (dice) exportDice(dice);
-        }
-
-        if (target.closest(".ekd-settings-delete")) {
-            event.preventDefault();
-            const id = target.closest("[data-id]")?.dataset.id;
-            const dice = definitions.find((d) => d.id === id);
-            if (!dice) return;
-            // Module-shipped dice cannot be deleted
-            if (dice.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`)) {
-                ui.notifications.warn(
-                    game.i18n.localize("EKD.Config.DefaultProtected"),
-                );
-                return;
-            }
-            Dialog.confirm({
-                title: game.i18n.localize("EKD.Config.Delete"),
-                content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`
-                    + `<p class="notes">${game.i18n.localize("EKD.Config.DeleteFolderHint")}</p>`,
-            }).then(async (confirmed) => {
-                if (!confirmed) return;
-                // Remove from DB cache (filesystem folder must be removed
-                // manually by the user — Foundry has no file-delete API)
-                const updated = (
-                    game.settings.get(MODULE_ID, "diceDefinitions") || []
-                ).filter((d) => d.id !== id);
-                await game.settings.set(MODULE_ID, "diceDefinitions", updated);
-                console.log(
-                    `${MODULE_ID} | Dice "${dice.name}" removed from cache` +
-                    (dice.slug ? ` (remove folder "${dice.slug}" to complete deletion)` : ""),
-                );
-                app.render(true);
-                promptReload();
-            });
         }
 
         if (target.closest(".ekd-settings-add")) {

@@ -344,6 +344,27 @@
     margin-bottom: 8px !important;
 }
 
+.ekd-folder-hints {
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+}
+
+.ekd-folder-hints p.notes {
+    margin: 3px 0 !important;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.ekd-folder-hints code {
+    background: rgba(0, 0, 0, 0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
 .ekd-settings-lang {
     font-size: 12px;
     opacity: 0.8;

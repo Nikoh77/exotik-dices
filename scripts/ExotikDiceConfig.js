@@ -412,11 +412,6 @@ export class ExotikDiceConfig extends FormApplication {
                 event.stopPropagation();
                 return this._onEditDice(event);
             }
-            if (t.closest(".ekd-delete")) {
-                event.preventDefault();
-                event.stopPropagation();
-                return this._onDeleteDice(event);
-            }
             if (t.closest(".ekd-back")) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -539,34 +534,6 @@ export class ExotikDiceConfig extends FormApplication {
         this._originalSnapshot = null;
         this._editingDice = foundry.utils.deepClone(dice);
         setTimeout(() => this.render(true), 0);
-    }
-
-    async _onDeleteDice(event) {
-        event.preventDefault();
-        const id = event.target.closest("[data-id]")?.dataset?.id;
-        if (!id) return;
-        const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
-        const dice = defs.find((d) => d.id === id);
-        if (!dice) return;
-        // Dice shipped with the module (assets under modules/) are read-only
-        if (dice.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`)) {
-            ui.notifications.warn(game.i18n.localize("EKD.Config.DefaultProtected"));
-            return;
-        }
-        const confirmed = await Dialog.confirm({
-            title: game.i18n.localize("EKD.Config.Delete"),
-            content: `<p>${game.i18n.format("EKD.Config.DeleteConfirm", { name: dice.name })}</p>`
-                + `<p class="notes">${game.i18n.localize("EKD.Config.DeleteFolderHint")}</p>`,
-        });
-        if (!confirmed) return;
-        const updated = defs.filter((d) => d.id !== id);
-        await game.settings.set(MODULE_ID, "diceDefinitions", updated);
-        console.log(
-            `${MODULE_ID} | Dice "${dice.name}" removed from cache` +
-            (dice.slug ? ` (remove folder "${dice.slug}" to complete deletion)` : ""),
-        );
-        this.render(true);
-        promptReload();
     }
 
     /* ── Editor mode handlers ── */

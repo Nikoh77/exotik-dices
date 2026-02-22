@@ -32,7 +32,9 @@
             "HintNote": "Attenzione: con questo modulo non \u00e8 possibile creare dadi standard a numerazione (per cui esiste gi\u00e0 l\u2019ottimo Dice So Nice), ma solo dadi con simboli. I risultati vengono raggruppati per tipo, ad es. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660.",
             "Export": "Esporta",
             "Refresh": "Aggiorna dadi",
-            "DefaultProtected": "Il dado predefinito non può essere eliminato."
+            "DefaultProtected": "Il dado predefinito non può essere eliminato.",
+            "FolderAddHint": "<strong>Aggiungere dadi:</strong> crea una sottocartella contenente un <code>dice.json</code> in <code>{path}</code>, quindi clicca Aggiorna o ricarica il mondo.",
+            "FolderRemoveHint": "<strong>Rimuovere dadi:</strong> elimina la sottocartella corrispondente da <code>{path}</code>, quindi ricarica il mondo."
         },
 
         "Export": {
