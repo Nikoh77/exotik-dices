@@ -14,35 +14,14 @@ import {
 
 import { exportDice, syncDiceFromFilesystem } from "./dicePorting.js";
 
-/* ---------------------------------------- */
-/*  Constants                                */
-/* ---------------------------------------- */
-
-const MODULE_ID = "exotik-dices";
-const ASSETS_PATH = `modules/${MODULE_ID}/assets`;
-
-/** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
-const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
-
-/**
- * Asset folder convention per dice:
- *   assets/dices/<dice_slug>/textures/   -> 3D face textures (PNG)
- *   assets/dices/<dice_slug>/bump_maps/  -> 3D bump maps (PNG)
- *   assets/dices/<dice_slug>/chat_2d/    -> Chat icons (SVG/PNG)
- *   assets/geometries/                   -> Shared 3D geometries (GLB)
- */
-const DICES_PATH = `${ASSETS_PATH}/dices`;
-const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
-const GEOMETRIES_PATH = `${ASSETS_PATH}/geometries`;
-
-/** Runtime accessor for the user-configurable dice data path. */
-function getUserDicePath() {
-    try {
-        return game.settings.get(MODULE_ID, "diceDataPath") || DEFAULT_USER_DICES_PATH;
-    } catch {
-        return DEFAULT_USER_DICES_PATH;
-    }
-}
+import {
+    MODULE_ID,
+    FP,
+    DICES_PATH,
+    DEFAULT_USER_DICES_PATH,
+    GEOMETRIES_PATH,
+    getUserDicePath,
+} from "./constants.js";
 
 /* ---------------------------------------- */
 /*  Runtime lookup maps                      */
@@ -188,14 +167,6 @@ function registerSettings() {
         config: false,
         type: String,
         default: DEFAULT_USER_DICES_PATH,
-    });
-
-    game.settings.register(MODULE_ID, "schemaVersion", {
-        name: "Schema Version",
-        scope: "world",
-        config: false,
-        type: Number,
-        default: 0,
     });
 
     game.settings.registerMenu(MODULE_ID, "diceConfig", {
@@ -410,8 +381,10 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     listHtml += `<span class="ekd-settings-lang"><i class="fas fa-globe"></i> ${langDisplay}</span>`;
     listHtml += `<button type="button" class="ekd-settings-help"><i class="fas fa-book-open"></i> ${t.readme}</button>`;
     listHtml += `</div>`;
+    listHtml += `<div class="ekd-folder-hints">`;
     listHtml += `<p class="notes ekd-hint-main">${t.hint}</p>`;
     listHtml += `<p class="notes ekd-hint-note">${t.hintNote}</p>`;
+    listHtml += `</div>`;
 
     // Dice data path with browse button
     const currentPath = getUserDicePath();

@@ -7,8 +7,7 @@
  * On startup (`syncDiceFromFilesystem`) the module scans all dice folders,
  * reads every `dice.json`, and compares the result with the DB cache
  * (`diceDefinitions` setting).  If anything changed the cache is updated
- * and a world-reload is requested so that CONFIG.Dice.terms can be
- * re-registered.
+ * and dice classes are registered on the fly via `registerDiceOnTheFly()`.
  *
  * Export builds a portable ZIP of the dice folder (dice.json + assets).
  *
@@ -17,27 +16,7 @@
  */
 
 import { zipSync } from "./vendor/fflate.min.js";
-
-const MODULE_ID = "exotik-dices";
-
-/** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
-const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
-
-/** Module-shipped default dice path. */
-const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
-const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
-
-/** Runtime accessor for the user-configurable dice data path. */
-function getUserDicePath() {
-    try {
-        return (
-            game.settings.get(MODULE_ID, "diceDataPath") ||
-            DEFAULT_USER_DICES_PATH
-        );
-    } catch {
-        return DEFAULT_USER_DICES_PATH;
-    }
-}
+import { MODULE_ID, FP, DICES_PATH, getUserDicePath } from "./constants.js";
 
 /* ──────────────────────────────────────────── */
 /*  Export                                       */
@@ -245,7 +224,7 @@ async function readDiceJson(jsonPath, folderPath) {
  * DB cache.  If anything changed, update the cache.
  *
  * @returns {Promise<{changed: boolean, definitions: object[]}>}
- *   `changed` is true when the DB was updated (caller should prompt reload).
+ *   `changed` is true when the DB was updated.
  *   `definitions` is the up-to-date array of dice definitions.
  */
 export async function syncDiceFromFilesystem() {

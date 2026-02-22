@@ -1,10 +1,8 @@
 {
     "EKD": {
-        "Dice": "Exotik Dices",
         "DSNRequired": "Dice So Nice! module is required for Exotik Dices to work. Please install and enable it.",
 
         "Settings": {
-            "DiceDefinitions": "Dice Definitions",
             "ConfigureDice": "Configure Exotik Dices",
             "ConfigureLabel": "Configure",
             "ConfigureHint": "Create and customize your exotic dice.",
@@ -20,9 +18,6 @@
             "NoDice": "No dice defined yet. Click \"Add Dice\" to create your first exotic dice.",
             "FacesLabel": "faces",
             "Edit": "Edit",
-            "Delete": "Delete",
-            "DeleteConfirm": "Are you sure you want to delete \"{name}\"?",
-            "DeleteFolderHint": "The dice folder will remain on disk. Remove it manually to complete deletion.",
             "DiceSaved": "Dice \"{name}\" saved.",
             "README": "README",
             "HintNote": "Note: this module creates symbol dice only (not standard numbered dice, for which Dice So Nice already works great). Results are grouped by type, e.g. 2\u00d7\u2665 1\u00d7\u2666 3\u00d7\u2660.",
@@ -39,7 +34,6 @@
         },
 
         "Import": {
-            "Success": "{count} dice(s) synced from filesystem.",
             "Synced": "Dice updated from filesystem.",
             "NoneFound": "Filesystem and cache are in sync. No changes detected.",
             "DenomConflict": "Cannot load \"{name}\": denomination \"{denom}\" is already used by \"{existing}\"."

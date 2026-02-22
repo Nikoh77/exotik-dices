@@ -10,23 +10,12 @@
 
 import { writeDiceJson } from "./dicePorting.js";
 
-const MODULE_ID = "exotik-dices";
-
-/** Foundry v13+ deprecates the global FilePicker; use the namespaced class. */
-const FP = foundry.applications.apps?.FilePicker ?? FilePicker;
-
-const DICES_PATH = `modules/${MODULE_ID}/assets/dices`;
-const DEFAULT_USER_DICES_PATH = `${MODULE_ID}/dices`;
-const GEOMETRIES_PATH = `modules/${MODULE_ID}/assets/geometries`;
-
-/** Runtime accessor for the user-configurable dice data path. */
-function getUserDicePath() {
-    try {
-        return game.settings.get(MODULE_ID, "diceDataPath") || DEFAULT_USER_DICES_PATH;
-    } catch {
-        return DEFAULT_USER_DICES_PATH;
-    }
-}
+import {
+    MODULE_ID,
+    FP,
+    GEOMETRIES_PATH,
+    getUserDicePath,
+} from "./constants.js";
 
 /** Supported face counts */
 const FACE_OPTIONS = [4, 6, 8, 10, 12, 20];
@@ -358,9 +347,10 @@ export class ExotikDiceConfig extends FormApplication {
         const allGeos = ExotikDiceConfig._geometriesCache || [];
         const diceList = definitions.map((d) => {
             const geo = allGeos.find((g) => g.value === d.geometry);
+            const isModuleDice = d.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`);
             return {
                 ...d,
-                isDefault: d.id === "ekd-default-combat",
+                isDefault: !!isModuleDice,
                 geometryLabel: geo
                     ? geo.name
                     : game.i18n.localize("EKD.Editor.GeometryStandard"),

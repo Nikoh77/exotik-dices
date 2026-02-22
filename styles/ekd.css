@@ -245,56 +245,6 @@
     margin-right: 4px;
 }
 
-/* ============================================= */
-/*  CSS 3D Cube Preview (d6)                     */
-/* ============================================= */
-
-.ekd-preview-scene {
-    width: 120px;
-    height: 120px;
-    perspective: 400px;
-    margin: 12px auto;
-}
-
-.ekd-preview-cube {
-    width: 80px;
-    height: 80px;
-    position: relative;
-    transform-style: preserve-3d;
-    margin: 20px auto;
-    animation: ekd-rotate 15s infinite linear;
-}
-
-@keyframes ekd-rotate {
-    from { transform: rotateX(-25deg) rotateY(0deg); }
-    to   { transform: rotateX(-25deg) rotateY(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .ekd-preview-cube {
-        animation: none;
-        transform: rotateX(-25deg) rotateY(35deg);
-    }
-}
-
-.ekd-pf {
-    position: absolute;
-    width: 80px;
-    height: 80px;
-    background-size: cover;
-    background-position: center;
-    background-color: #e8e0d4;
-    border: 1px solid #999;
-    border-radius: 10px;
-}
-
-.ekd-pf-0 { transform: translateZ(40px); }
-.ekd-pf-1 { transform: rotateY(180deg) translateZ(40px); }
-.ekd-pf-2 { transform: rotateY(90deg) translateZ(40px); }
-.ekd-pf-3 { transform: rotateY(-90deg) translateZ(40px); }
-.ekd-pf-4 { transform: rotateX(90deg) translateZ(40px); }
-.ekd-pf-5 { transform: rotateX(-90deg) translateZ(40px); }
-
 /* ── 3D DSN Preview ────────────────────────── */
 
 .ekd-3d-preview {
@@ -319,9 +269,7 @@
     display: block;
 }
 
-
-
-/* ============================================= */
+/* =============================================
 /*  Settings Config – injected panel extras      */
 /* ============================================= */
 

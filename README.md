@@ -1,3 +1,5 @@
+![Descrizione Immagine](head.png)
+
 # Exotik Dices
 
 A [Foundry VTT](https://foundryvtt.com/) module that adds fully customizable exotic dice with [Dice So Nice!](https://gitlab.com/riccisi/foundryvtt-dice-so-nice) integration, where exotic means with symbols/images.
