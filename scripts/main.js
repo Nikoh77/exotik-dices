@@ -11,6 +11,7 @@ import {
     promptReload,
     markdownToHtml,
     resolveFace,
+    deleteFolderRecursive,
 } from "./ExotikDiceConfig.js";
 
 import { exportDice, autoImportDice } from "./dicePorting.js";
@@ -238,11 +239,13 @@ function buildChatSummary(rolls) {
         const def = _diceDefinitions.get(r.denomination);
         const faceDef = resolveFace(def?.faceMap || [], r.result - 1);
         if (!faceDef) continue;
+        // Only include faces that have an icon or label defined
+        if (!faceDef.icon && !faceDef.label) continue;
 
-        const key = faceDef.icon || faceDef.label || String(r.result);
+        const key = faceDef.icon || faceDef.label;
         if (!groups.has(key)) {
             groups.set(key, {
-                label: faceDef.label || String(r.result),
+                label: faceDef.label || "",
                 icon: faceDef.icon,
                 count: 0,
             });
@@ -552,72 +555,17 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
                     game.settings.get(MODULE_ID, "diceDefinitions") || []
                 ).filter((d) => d.id !== id);
                 await game.settings.set(MODULE_ID, "diceDefinitions", updated);
-                // Try to remove the dice asset folder
+                // Remove the dice asset folder
                 if (dice.slug) {
                     const possiblePaths = [
                         `${getUserDicePath()}/${dice.slug}`,
                         `${DICES_PATH}/${dice.slug}`,
                     ];
                     for (const folderPath of possiblePaths) {
-                        try {
-                            await FP.browse("data", folderPath).then(
-                                async (result) => {
-                                    for (const file of result.files || []) {
-                                        try {
-                                            await fetch(
-                                                window.location.origin +
-                                                    "/api/files",
-                                                {
-                                                    method: "DELETE",
-                                                    headers: {
-                                                        "Content-Type":
-                                                            "application/json",
-                                                    },
-                                                    body: JSON.stringify({
-                                                        path: file,
-                                                        source: "data",
-                                                    }),
-                                                },
-                                            );
-                                        } catch {}
-                                    }
-                                    for (const dir of result.dirs || []) {
-                                        try {
-                                            const sub = await FP.browse(
-                                                "data",
-                                                dir,
-                                            );
-                                            for (const f of sub.files || []) {
-                                                try {
-                                                    await fetch(
-                                                        window.location.origin +
-                                                            "/api/files",
-                                                        {
-                                                            method: "DELETE",
-                                                            headers: {
-                                                                "Content-Type":
-                                                                    "application/json",
-                                                            },
-                                                            body: JSON.stringify(
-                                                                {
-                                                                    path: f,
-                                                                    source: "data",
-                                                                },
-                                                            ),
-                                                        },
-                                                    );
-                                                } catch {}
-                                            }
-                                        } catch {}
-                                    }
-                                },
-                            );
-                            console.log(
-                                `${MODULE_ID} | Deleted asset folder: ${folderPath}`,
-                            );
-                        } catch {
-                            // folder not found in this location, try next
-                        }
+                        await deleteFolderRecursive(folderPath);
+                        console.log(
+                            `${MODULE_ID} | Deleted asset folder: ${folderPath}`,
+                        );
                     }
                 }
                 app.render(true);

@@ -1,7 +1,12 @@
 # Exotik Dices
 
-A [Foundry VTT](https://foundryvtt.com/) module that adds fully customizable exotic dice with [Dice So Nice!](https://gitlab.com/riccisi/foundryvtt-dice-so-nice) integration.
+A [Foundry VTT](https://foundryvtt.com/) module that adds fully customizable exotic dice with [Dice So Nice!](https://gitlab.com/riccisi/foundryvtt-dice-so-nice) integration, where exotic means with symbols/images.
 
+Almost all of the code was written by AI — not because I couldn’t write it myself or because I particularly enjoy using these tools, but simply because it would have taken time I didn’t have. Otherwise, this module wouldn’t exist at all.
+
+Basically, without AI I wouldn’t have had the time to develop it the old-school way, especially since I’m not a JavaScript developer and it would’ve taken me a bit longer…
+
+That said, the structure, organization, integrations, and the setup for future development were all guided by me — as well as, of course, all the features it currently has.
 ## Features
 
 - **Custom Dice** – Create dice with any number of faces (d4, d6, d8, d10, d12, d20) and assign custom textures, bump maps, and chat icons to each face.
@@ -30,7 +35,7 @@ A [Foundry VTT](https://foundryvtt.com/) module that adds fully customizable exo
 
 Each custom dice is assigned a single-character denomination (e.g. `h`). Roll it with:
 ```
-/r 1dh        (roll one combat die)
+/r 1dh        (roll one combat dice)
 /r 3dh        (roll three combat dice)
 /r 2dh + 1d6  (mix with standard dice)
 ```
@@ -51,9 +56,9 @@ Each custom dice is assigned a single-character denomination (e.g. `h`). Roll it
 
 ### Asset Folders
 
-When you save a dice, the module automatically creates folders:
+You can choose where to save your dice;w hen you save a dice, the module automatically creates folders:
 ```
-modules/exotik-dices/assets/dices/<dice_slug>/
+path-you-have-chosen/exotik-dices/assets/dices/<dice_slug>/
     textures/    → 3D face textures (PNG)
     bump_maps/   → 3D bump maps (PNG)
     chat_2d/     → Chat icons (SVG/PNG)
@@ -67,10 +72,12 @@ The module scans this folder and shows available geometries in the editor when a
 
 ## Included Dice
 
-The module ships with a **Combat Dice** (`dh`) featuring:
-- 3× Skull faces
-- 2× White Shield faces
-- 1× Black Shield face
+The module ships with a **Come quando fuori piove** (`dh`), this is a dummy dice featuring:
+
+- 2× Hearts faces
+- 2× clubs faces
+- 1× diamonds face
+- 1× spades face
 
 With a rounded "Board Game Classic" 3D geometry.
 
@@ -81,4 +88,5 @@ MIT
 ## Credits
 
 - **Author**: [Nikoh](https://github.com/Nikoh77)
+- **great helper** [Claude AI](https://claude.ai)
 - **Dice So Nice!**: [Simone](https://gitlab.com/riccisi/foundryvtt-dice-so-nice)

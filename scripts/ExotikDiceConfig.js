@@ -75,6 +75,45 @@ function wouldCreateLoop(faceMap, faceCount, fromIdx, toIdx) {
     return false;
 }
 
+/**
+ * Recursively delete a folder and all its contents from the Foundry data dir.
+ * Deletes files first, then sub-directories (depth-first), then the folder itself.
+ * @param {string} folderPath  Server-relative path
+ */
+export async function deleteFolderRecursive(folderPath) {
+    let result;
+    try {
+        result = await FP.browse("data", folderPath);
+    } catch {
+        return; // folder doesn't exist
+    }
+
+    // Delete files in this directory
+    for (const file of result.files || []) {
+        try {
+            await fetch(window.location.origin + "/api/files", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: file, source: "data" }),
+            });
+        } catch { /* best effort */ }
+    }
+
+    // Recurse into subdirectories
+    for (const dir of result.dirs || []) {
+        await deleteFolderRecursive(dir);
+    }
+
+    // Delete the (now empty) folder itself
+    try {
+        await fetch(window.location.origin + "/api/files", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: folderPath, source: "data" }),
+        });
+    } catch { /* best effort */ }
+}
+
 /** Create asset sub-folders for a dice on the server. */
 async function ensureDiceFolders(slug) {
     const userPath = getUserDicePath();
@@ -113,7 +152,7 @@ async function ensureDiceFolders(slug) {
 
 /** Show the reload-world dialog. */
 export function promptReload() {
-    new Dialog({
+    const d = new Dialog({
         title: game.i18n.localize("EKD.Config.ReloadRequired"),
         content: `<p>${game.i18n.localize("EKD.Config.ReloadRequiredMsg")}</p>`,
         buttons: {
@@ -128,7 +167,10 @@ export function promptReload() {
             },
         },
         default: "reload",
-    }).render(true);
+    });
+    d.render(true);
+    // Bring to front after a tick so it appears above the settings window
+    setTimeout(() => d.bringToTop?.(), 100);
 }
 
 /** Simple markdown → HTML for README display. */
@@ -555,68 +597,13 @@ export class ExotikDiceConfig extends FormApplication {
         await game.settings.set(MODULE_ID, "diceDefinitions", updated);
         // Try to remove the dice asset folder
         if (dice.slug) {
-            // Check both user and module paths
             const possiblePaths = [
                 `${getUserDicePath()}/${dice.slug}`,
                 `${DICES_PATH}/${dice.slug}`,
             ];
             for (const folderPath of possiblePaths) {
-                try {
-                    await FP.browse("data", folderPath).then(
-                        async (result) => {
-                            for (const file of result.files || []) {
-                                try {
-                                    await fetch(
-                                        window.location.origin + "/api/files",
-                                        {
-                                            method: "DELETE",
-                                            headers: {
-                                                "Content-Type":
-                                                    "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                path: file,
-                                                source: "data",
-                                            }),
-                                        },
-                                    );
-                                } catch {}
-                            }
-                            for (const dir of result.dirs || []) {
-                                try {
-                                    const sub = await FP.browse(
-                                        "data",
-                                        dir,
-                                    );
-                                    for (const f of sub.files || []) {
-                                        try {
-                                            await fetch(
-                                                window.location.origin +
-                                                    "/api/files",
-                                                {
-                                                    method: "DELETE",
-                                                    headers: {
-                                                        "Content-Type":
-                                                            "application/json",
-                                                    },
-                                                    body: JSON.stringify({
-                                                        path: f,
-                                                        source: "data",
-                                                    }),
-                                                },
-                                            );
-                                        } catch {}
-                                    }
-                                } catch {}
-                            }
-                        },
-                    );
-                    console.log(
-                        `${MODULE_ID} | Deleted asset folder: ${folderPath}`,
-                    );
-                } catch (err) {
-                    // folder not found in this location, try next
-                }
+                await deleteFolderRecursive(folderPath);
+                console.log(`${MODULE_ID} | Deleted asset folder: ${folderPath}`);
             }
         }
         this.render(true);
@@ -696,7 +683,7 @@ export class ExotikDiceConfig extends FormApplication {
                 const lights = [];
                 box.scene.traverse((obj) => {
                     if (obj.isLight) {
-                        obj.intensity *= 4;
+                        obj.intensity *= 6;
                         lights.push(obj);
                     }
                 });
@@ -707,11 +694,17 @@ export class ExotikDiceConfig extends FormApplication {
                     const fill = dirLight.clone();
                     fill.position.set(
                         -dirLight.position.x,
-                        dirLight.position.y,
+                        dirLight.position.y * 0.5,
                         -dirLight.position.z,
                     );
-                    fill.intensity = dirLight.intensity * 0.6;
+                    fill.intensity = dirLight.intensity * 0.8;
                     box.scene.add(fill);
+
+                    // Add a third light from below-front
+                    const bottom = dirLight.clone();
+                    bottom.position.set(0, -1, 1);
+                    bottom.intensity = dirLight.intensity * 0.4;
+                    box.scene.add(bottom);
                 }
             }
 
@@ -823,11 +816,11 @@ export class ExotikDiceConfig extends FormApplication {
                 system: previewSystem,
                 colorset: "custom",
                 foreground: "#FFFFFF",
-                background: "#1a1a2e",
-                outline: "black",
+                background: "#3a3a5e",
+                outline: "#555",
                 edge: "",
                 texture: "none",
-                material: "plastic",
+                material: "pristine",
                 font: "Arial",
                 fontScale: null,
                 systemSettings: {},
