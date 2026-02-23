@@ -15,6 +15,7 @@
             "Title": "Exotik Dices – Configuration",
             "Hint": "Manage your custom dice. Each dice is registered as a rollable denomination (e.g. /r 1dh).",
             "AddDice": "Add Dice",
+            "Import": "Import Dice",
             "NoDice": "No dice defined yet. Click \"Add Dice\" to create your first exotic dice.",
             "FacesLabel": "faces",
             "Edit": "Edit",
@@ -36,7 +37,14 @@
         "Import": {
             "Synced": "Dice updated from filesystem.",
             "NoneFound": "Filesystem and cache are in sync. No changes detected.",
-            "DenomConflict": "Cannot load \"{name}\": denomination \"{denom}\" is already used by \"{existing}\"."
+            "DenomConflict": "Cannot load \"{name}\": denomination \"{denom}\" is already used by \"{existing}\".",
+            "Success": "Dice \"{name}\" imported successfully.",
+            "InvalidZip": "The selected file is not a valid ZIP archive.",
+            "NoDiceJson": "The ZIP does not contain a dice.json file.",
+            "InvalidJson": "The dice.json file is not valid JSON.",
+            "MissingFields": "The dice.json is missing required fields (name, denomination, faceMap).",
+            "MissingAsset": "The ZIP is missing referenced asset: {path}",
+            "UploadFailed": "Failed to upload files. Check console for details."
         },
 
         "Editor": {

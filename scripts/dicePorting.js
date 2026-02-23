@@ -15,7 +15,7 @@
  * FilePicker.upload so the editor can persist changes.
  */
 
-import { zipSync } from "./vendor/fflate.min.js";
+import { zipSync, unzipSync } from "./vendor/fflate.min.js";
 import { MODULE_ID, FP, DICES_PATH, getUserDicePath } from "./constants.js";
 
 /* ──────────────────────────────────────────── */
@@ -132,6 +132,194 @@ export async function exportDice(diceDef) {
     ui.notifications.info(
         game.i18n.format("EKD.Export.Success", { name: diceDef.name }),
     );
+}
+
+/* ──────────────────────────────────────────── */
+/*  Import                                       */
+/* ──────────────────────────────────────────── */
+
+/**
+ * Validate a ZIP's contents for a valid dice import.
+ *
+ * Checks:
+ *   1. A dice.json exists (at root or inside one subfolder)
+ *   2. dice.json parses as valid JSON
+ *   3. Required fields present: name, denomination, faceMap
+ *   4. All referenced asset files (texture, bump, icon) exist in the ZIP
+ *
+ * @param {Object<string, Uint8Array>} entries  fflate unzipSync result
+ * @returns {{ ok: boolean, error?: string, slug?: string, def?: object, prefix?: string }}
+ */
+function validateZipContents(entries) {
+    const paths = Object.keys(entries);
+
+    // Find dice.json – may be at root or inside a single subfolder
+    const jsonKey = paths.find((p) => {
+        const parts = p.split("/").filter(Boolean);
+        const name = parts[parts.length - 1];
+        return name === "dice.json" && parts.length <= 2;
+    });
+
+    if (!jsonKey) {
+        return { ok: false, error: game.i18n.localize("EKD.Import.NoDiceJson") };
+    }
+
+    // Parse JSON
+    let def;
+    try {
+        const text = new TextDecoder().decode(entries[jsonKey]);
+        def = JSON.parse(text);
+    } catch {
+        return { ok: false, error: game.i18n.localize("EKD.Import.InvalidJson") };
+    }
+
+    // Required fields
+    if (!def.name || !def.denomination || !Array.isArray(def.faceMap)) {
+        return { ok: false, error: game.i18n.localize("EKD.Import.MissingFields") };
+    }
+
+    // Determine prefix (e.g. "my_dice/" if json was at "my_dice/dice.json")
+    const prefix = jsonKey.includes("/")
+        ? jsonKey.slice(0, jsonKey.lastIndexOf("/") + 1)
+        : "";
+
+    // Determine slug from the folder or dice def
+    const slug = prefix
+        ? prefix.split("/").filter(Boolean)[0]
+        : def.slug || def.name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+    // Verify all referenced assets exist in the ZIP
+    for (const face of def.faceMap) {
+        for (const key of ["texture", "bump", "icon"]) {
+            const val = face[key];
+            if (!val) continue;
+            // The asset path in dice.json is relative to the dice folder
+            const expectedKey = prefix + val;
+            if (!entries[expectedKey]) {
+                return {
+                    ok: false,
+                    error: game.i18n.format("EKD.Import.MissingAsset", { path: val }),
+                };
+            }
+        }
+    }
+
+    return { ok: true, slug, def, prefix };
+}
+
+/**
+ * Import a dice from a ZIP file selected by the user.
+ *
+ * Opens a native file dialog, validates the ZIP, and extracts
+ * its contents to the user's dice data path.
+ *
+ * @param {Function} onComplete  Called after successful import with
+ *                               no arguments – the caller should
+ *                               trigger sync + re-render.
+ */
+export async function importDice(onComplete) {
+    // Create a hidden file input to trigger the OS file dialog
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".zip";
+    input.style.display = "none";
+    document.body.appendChild(input);
+
+    input.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        document.body.removeChild(input);
+        if (!file) return;
+
+        // Read the file as ArrayBuffer
+        let buffer;
+        try {
+            buffer = await file.arrayBuffer();
+        } catch {
+            ui.notifications.error(game.i18n.localize("EKD.Import.InvalidZip"));
+            return;
+        }
+
+        // Decompress
+        let entries;
+        try {
+            entries = unzipSync(new Uint8Array(buffer));
+        } catch {
+            ui.notifications.error(game.i18n.localize("EKD.Import.InvalidZip"));
+            return;
+        }
+
+        // Validate
+        const result = validateZipContents(entries);
+        if (!result.ok) {
+            ui.notifications.error(result.error);
+            return;
+        }
+
+        const { slug, def, prefix } = result;
+        const userPath = getUserDicePath();
+        const destFolder = `${userPath}/${slug}`;
+
+        // Check denomination conflict with existing dice
+        const existing = game.settings.get(MODULE_ID, "diceDefinitions") || [];
+        const conflict = existing.find(
+            (d) => d.denomination === def.denomination && d.slug !== slug,
+        );
+        if (conflict) {
+            ui.notifications.error(
+                game.i18n.format("EKD.Import.DenomConflict", {
+                    name: def.name,
+                    denom: def.denomination,
+                    existing: conflict.name,
+                }),
+            );
+            return;
+        }
+
+        // Upload every file from the ZIP to the destination folder
+        try {
+            const zipPaths = Object.keys(entries);
+            for (const zipPath of zipPaths) {
+                const data = entries[zipPath];
+                // Skip directory entries (zero-length entries whose path ends with /)
+                if (zipPath.endsWith("/") || data.length === 0) continue;
+
+                // Compute relative path from the prefix and rebuild under slug
+                let relPath;
+                if (prefix && zipPath.startsWith(prefix)) {
+                    relPath = zipPath.slice(prefix.length);
+                } else {
+                    relPath = zipPath;
+                }
+
+                // Determine the upload folder and filename
+                const lastSlash = relPath.lastIndexOf("/");
+                const fileName = lastSlash >= 0 ? relPath.slice(lastSlash + 1) : relPath;
+                const subFolder = lastSlash >= 0 ? relPath.slice(0, lastSlash) : "";
+                const uploadDir = subFolder
+                    ? `${destFolder}/${subFolder}`
+                    : destFolder;
+
+                // Build a File object from the Uint8Array
+                const blob = new Blob([data]);
+                const uploadFile = new File([blob], fileName);
+
+                await FP.upload("data", uploadDir, uploadFile, {});
+            }
+        } catch (err) {
+            console.error(`${MODULE_ID} | importDice upload error:`, err);
+            ui.notifications.error(game.i18n.localize("EKD.Import.UploadFailed"));
+            return;
+        }
+
+        ui.notifications.info(
+            game.i18n.format("EKD.Import.Success", { name: def.name }),
+        );
+
+        if (typeof onComplete === "function") onComplete();
+    });
+
+    // Trigger the file dialog
+    input.click();
 }
 
 /* ──────────────────────────────────────────── */
