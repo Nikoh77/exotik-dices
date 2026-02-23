@@ -139,6 +139,16 @@ export async function exportDice(diceDef) {
 /* ──────────────────────────────────────────── */
 
 /**
+ * Compute a hex SHA-256 hash of a Uint8Array.
+ * @param {Uint8Array} data
+ * @returns {Promise<string>}
+ */
+async function hashBytes(data) {
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
  * Validate a ZIP's contents for a valid dice import.
  *
  * Checks:
@@ -259,7 +269,7 @@ export async function importDice(onComplete) {
         const userPath = getUserDicePath();
         const destFolder = `${userPath}/${slug}`;
 
-        // Check denomination conflict with existing dice
+        // Check denomination conflict with existing dice (different slug)
         const existing = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const conflict = existing.find(
             (d) => d.denomination === def.denomination && d.slug !== slug,
@@ -275,9 +285,121 @@ export async function importDice(onComplete) {
             return;
         }
 
-        // Upload every file from the ZIP to the destination folder
+        // ── Check if the dice folder already exists ──
+        let folderExists = false;
+        let existingFiles = [];
         try {
+            existingFiles = await collectFiles(destFolder);
+            folderExists = true;
+        } catch {
+            // Folder doesn't exist – fresh import
+        }
+
+        if (folderExists) {
+            // Find existing dice.json on disk
+            const existingJsonPath = existingFiles.find(
+                (f) => f.endsWith("/dice.json") || f.endsWith("\\dice.json"),
+            );
+
+            // Build hash of the incoming dice.json from the ZIP
+            const incomingJsonKey = Object.keys(entries).find(
+                (p) => p.endsWith("/dice.json") || p === "dice.json",
+            );
+            const incomingHash = await hashBytes(entries[incomingJsonKey]);
+
+            // Build hash of the existing dice.json on disk
+            let identical = false;
+            if (existingJsonPath) {
+                try {
+                    const resp = await fetch(existingJsonPath);
+                    if (resp.ok) {
+                        const buf = await resp.arrayBuffer();
+                        const existingHash = await hashBytes(new Uint8Array(buf));
+                        identical = incomingHash === existingHash;
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (identical) {
+                // Also compare all asset files to be thorough
+                let allAssetsIdentical = true;
+                const zipPaths = Object.keys(entries).filter(
+                    (p) => !p.endsWith("/") && !p.endsWith("dice.json") && entries[p].length > 0,
+                );
+                for (const zipPath of zipPaths) {
+                    let relPath = prefix && zipPath.startsWith(prefix)
+                        ? zipPath.slice(prefix.length)
+                        : zipPath;
+                    const diskPath = `${destFolder}/${relPath}`;
+                    if (!existingFiles.includes(diskPath)) {
+                        allAssetsIdentical = false;
+                        break;
+                    }
+                    try {
+                        const resp = await fetch(diskPath);
+                        if (!resp.ok) { allAssetsIdentical = false; break; }
+                        const diskHash = await hashBytes(new Uint8Array(await resp.arrayBuffer()));
+                        const zipHash = await hashBytes(entries[zipPath]);
+                        if (diskHash !== zipHash) { allAssetsIdentical = false; break; }
+                    } catch { allAssetsIdentical = false; break; }
+                }
+
+                if (allAssetsIdentical) {
+                    ui.notifications.info(
+                        game.i18n.format("EKD.Import.AlreadyIdentical", { name: def.name }),
+                    );
+                    return;
+                }
+            }
+
+            // Folder exists but content differs → ask user
+            const userChoice = await new Promise((resolve) => {
+                new Dialog({
+                    title: "Exotik Dices – Import",
+                    content: `<p>${game.i18n.format("EKD.Import.DifferentVersion", { name: def.name })}</p>`,
+                    buttons: {
+                        replace: {
+                            icon: '<i class="fas fa-exchange-alt"></i>',
+                            label: game.i18n.localize("EKD.Import.Replace"),
+                            callback: () => resolve("replace"),
+                        },
+                        skip: {
+                            icon: '<i class="fas fa-ban"></i>',
+                            label: game.i18n.localize("EKD.Import.KeepExisting"),
+                            callback: () => resolve("skip"),
+                        },
+                    },
+                    default: "skip",
+                    close: () => resolve("skip"),
+                }).render(true);
+            });
+
+            if (userChoice === "skip") {
+                ui.notifications.info(
+                    game.i18n.format("EKD.Import.Skipped", { name: def.name }),
+                );
+                return;
+            }
+        }
+
+        // ── Upload files (only changed ones when replacing) ──
+        try {
+            // Build a hash map of existing files on disk for diff-upload
+            const existingHashes = new Map();
+            if (folderExists) {
+                for (const fp of existingFiles) {
+                    try {
+                        const resp = await fetch(fp);
+                        if (resp.ok) {
+                            const h = await hashBytes(new Uint8Array(await resp.arrayBuffer()));
+                            existingHashes.set(fp, h);
+                        }
+                    } catch { /* skip */ }
+                }
+            }
+
             const zipPaths = Object.keys(entries);
+            let uploaded = 0;
             for (const zipPath of zipPaths) {
                 const data = entries[zipPath];
                 // Skip directory entries (zero-length entries whose path ends with /)
@@ -289,6 +411,16 @@ export async function importDice(onComplete) {
                     relPath = zipPath.slice(prefix.length);
                 } else {
                     relPath = zipPath;
+                }
+
+                // Skip unchanged files when replacing
+                if (folderExists) {
+                    const diskPath = `${destFolder}/${relPath}`;
+                    const diskHash = existingHashes.get(diskPath);
+                    if (diskHash) {
+                        const zipHash = await hashBytes(data);
+                        if (diskHash === zipHash) continue;
+                    }
                 }
 
                 // Determine the upload folder and filename
@@ -304,15 +436,19 @@ export async function importDice(onComplete) {
                 const uploadFile = new File([blob], fileName);
 
                 await FP.upload("data", uploadDir, uploadFile, {});
+                uploaded++;
             }
+
+            console.log(`${MODULE_ID} | importDice: uploaded ${uploaded} file(s) to ${destFolder}`);
         } catch (err) {
             console.error(`${MODULE_ID} | importDice upload error:`, err);
             ui.notifications.error(game.i18n.localize("EKD.Import.UploadFailed"));
             return;
         }
 
+        const msgKey = folderExists ? "EKD.Import.Replaced" : "EKD.Import.Success";
         ui.notifications.info(
-            game.i18n.format("EKD.Import.Success", { name: def.name }),
+            game.i18n.format(msgKey, { name: def.name }),
         );
 
         if (typeof onComplete === "function") onComplete();

@@ -44,7 +44,13 @@
             "InvalidJson": "The dice.json file is not valid JSON.",
             "MissingFields": "The dice.json is missing required fields (name, denomination, faceMap).",
             "MissingAsset": "The ZIP is missing referenced asset: {path}",
-            "UploadFailed": "Failed to upload files. Check console for details."
+            "UploadFailed": "Failed to upload files. Check console for details.",
+            "AlreadyIdentical": "Dice \"{name}\" already exists and is identical. Import skipped.",
+            "DifferentVersion": "A dice named <strong>{name}</strong> already exists but the imported version is different.<br>Do you want to replace the existing dice?",
+            "Replace": "Replace",
+            "KeepExisting": "Keep existing",
+            "Replaced": "Dice \"{name}\" replaced successfully.",
+            "Skipped": "Import skipped. Existing dice \"{name}\" kept."
         },
 
         "Editor": {

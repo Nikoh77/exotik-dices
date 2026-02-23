@@ -44,7 +44,13 @@
             "InvalidJson": "Il file dice.json non è un JSON valido.",
             "MissingFields": "Il file dice.json non contiene i campi obbligatori (name, denomination, faceMap).",
             "MissingAsset": "Lo ZIP non contiene l'asset referenziato: {path}",
-            "UploadFailed": "Impossibile caricare i file. Controlla la console per i dettagli."
+            "UploadFailed": "Impossibile caricare i file. Controlla la console per i dettagli.",
+            "AlreadyIdentical": "Il dado \"{name}\" esiste già ed è identico. Importazione saltata.",
+            "DifferentVersion": "Esiste già un dado chiamato <strong>{name}</strong> ma la versione da importare è diversa.<br>Vuoi sostituire il dado esistente?",
+            "Replace": "Sostituisci",
+            "KeepExisting": "Mantieni esistente",
+            "Replaced": "Dado \"{name}\" sostituito con successo.",
+            "Skipped": "Importazione saltata. Dado \"{name}\" esistente mantenuto."
         },
 
         "Editor": {
