@@ -15,6 +15,7 @@
             "Title": "Exotik Dices – Configurazione",
             "Hint": "Gestisci i tuoi dadi personalizzati. Ogni dado viene registrato come denominazione tirabile (es. /r 1dh).",
             "AddDice": "Aggiungi Dado",
+            "Import": "Importa Dado",
             "NoDice": "Nessun dado definito. Clicca \"Aggiungi Dado\" per creare il tuo primo dado esotico.",
             "FacesLabel": "facce",
             "Edit": "Modifica",
@@ -36,7 +37,20 @@
         "Import": {
             "Synced": "Dadi aggiornati dal filesystem.",
             "NoneFound": "Filesystem e cache sono sincronizzati. Nessuna modifica rilevata.",
-            "DenomConflict": "Impossibile caricare \"{name}\": la denominazione \"{denom}\" è già usata da \"{existing}\"."
+            "DenomConflict": "Impossibile caricare \"{name}\": la denominazione \"{denom}\" è già usata da \"{existing}\".",
+            "Success": "Dado \"{name}\" importato con successo.",
+            "InvalidZip": "Il file selezionato non è un archivio ZIP valido.",
+            "NoDiceJson": "Lo ZIP non contiene un file dice.json.",
+            "InvalidJson": "Il file dice.json non è un JSON valido.",
+            "MissingFields": "Il file dice.json non contiene i campi obbligatori (name, denomination, faceMap).",
+            "MissingAsset": "Lo ZIP non contiene l'asset referenziato: {path}",
+            "UploadFailed": "Impossibile caricare i file. Controlla la console per i dettagli.",
+            "AlreadyIdentical": "Il dado \"{name}\" esiste già ed è identico. Importazione saltata.",
+            "DifferentVersion": "Esiste già un dado chiamato <strong>{name}</strong> ma la versione da importare è diversa.<br>Vuoi sostituire il dado esistente?",
+            "Replace": "Sostituisci",
+            "KeepExisting": "Mantieni esistente",
+            "Replaced": "Dado \"{name}\" sostituito con successo.",
+            "Skipped": "Importazione saltata. Dado \"{name}\" esistente mantenuto."
         },
 
         "Editor": {

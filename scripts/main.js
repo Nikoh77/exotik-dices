@@ -12,7 +12,7 @@ import {
     resolveFace,
 } from "./ExotikDiceConfig.js";
 
-import { exportDice, syncDiceFromFilesystem } from "./dicePorting.js";
+import { exportDice, importDice, syncDiceFromFilesystem } from "./dicePorting.js";
 
 import {
     MODULE_ID,
@@ -456,6 +456,7 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         refresh: game.i18n.localize("EKD.Config.Refresh"),
         edit: game.i18n.localize("EKD.Config.Edit"),
         exp: game.i18n.localize("EKD.Config.Export"),
+        imp: game.i18n.localize("EKD.Config.Import"),
         faces: game.i18n.localize("EKD.Config.FacesLabel"),
         noDice: game.i18n.localize("EKD.Config.NoDice"),
         readme: game.i18n.localize("EKD.Config.README"),
@@ -491,6 +492,9 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     listHtml += `<div class="ekd-settings-buttons">
             <button type="button" class="ekd-settings-add">
                 <i class="fas fa-plus"></i> ${t.addDice}
+            </button>
+            <button type="button" class="ekd-settings-import">
+                <i class="fas fa-file-import"></i> ${t.imp}
             </button>
             <button type="button" class="ekd-settings-refresh">
                 <i class="fas fa-sync-alt"></i> ${t.refresh}
@@ -573,6 +577,21 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
             }).catch((err) => {
                 console.error(`${MODULE_ID} | sync error:`, err);
                 ui.notifications.error("Sync failed - see console.");
+            });
+        }
+
+        if (target.closest(".ekd-settings-import")) {
+            event.preventDefault();
+            importDice(() => {
+                // After successful import, sync filesystem and re-render
+                syncDiceFromFilesystem().then(({ changed, definitions }) => {
+                    if (changed) {
+                        registerDiceOnTheFly(definitions);
+                    }
+                    app.render(true);
+                }).catch((err) => {
+                    console.error(`${MODULE_ID} | sync error after import:`, err);
+                });
             });
         }
 
