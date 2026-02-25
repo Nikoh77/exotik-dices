@@ -322,6 +322,16 @@
     margin-right: 4px;
 }
 
+.ekd-settings-version {
+    font-size: 12px;
+    opacity: 0.65;
+    font-style: italic;
+}
+
+.ekd-settings-version i {
+    margin-right: 3px;
+}
+
 .ekd-settings-help {
     font-size: 12px;
     cursor: pointer;

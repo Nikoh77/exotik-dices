@@ -466,10 +466,12 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     const langNames = { en: "English", it: "Italiano" };
     const curLang = game.i18n.lang || "en";
     const langDisplay = langNames[curLang] || curLang;
+    const moduleVersion = game.modules.get(MODULE_ID)?.version ?? "";
 
     let listHtml = `<div class="ekd-settings-dice">`;
     listHtml += `<div class="ekd-settings-header">`;
     listHtml += `<span class="ekd-settings-lang"><i class="fas fa-globe"></i> ${langDisplay}</span>`;
+    listHtml += `<span class="ekd-settings-version"><i class="fas fa-tag"></i> v${moduleVersion}</span>`;
     listHtml += `<button type="button" class="ekd-settings-help"><i class="fas fa-book-open"></i> ${t.readme}</button>`;
     listHtml += `</div>`;
     listHtml += `<div class="ekd-folder-hints">`;
