@@ -984,7 +984,7 @@ export class ExotikDiceConfig extends FormApplication {
             const refFace = refStr !== "" ? parseInt(refStr) : null;
             faceMap.push({
                 refFace,
-                label: refFace != null ? "" : (f.label ?? "").trim(),
+                label: refFace != null ? "" : (f.label ?? "").trim().replace(/\s+/g, "_"),
                 texture: refFace != null ? "" : (f.texture ?? "").trim(),
                 bump: refFace != null ? "" : (f.bump ?? "").trim(),
                 icon: refFace != null ? "" : (f.icon ?? "").trim(),
@@ -1131,7 +1131,7 @@ export class ExotikDiceConfig extends FormApplication {
                 const refFace = refStr !== "" ? parseInt(refStr) : null;
                 newMap.push({
                     refFace,
-                    label: refFace != null ? "" : (f.label ?? "").trim(),
+                    label: refFace != null ? "" : (f.label ?? "").trim().replace(/\s+/g, "_"),
                     texture: refFace != null ? "" : (f.texture ?? "").trim(),
                     bump: refFace != null ? "" : (f.bump ?? "").trim(),
                     icon: refFace != null ? "" : (f.icon ?? "").trim(),
