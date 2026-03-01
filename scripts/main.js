@@ -739,7 +739,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
                 const ekdSys = this.systems?.get("ekd");
                 const preset = ekdSys?.dice?.get(i);
                 if (preset && !preset.modelLoaded) {
-                    console.warn(
+                    console.debug(
                         `${MODULE_ID} | Preset ${i} textures not yet loaded – awaiting…`,
                     );
                     await preset.loadTextures();
