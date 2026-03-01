@@ -364,16 +364,19 @@ Hooks.once("ready", () => {
         ui.notifications.warn(game.i18n.localize("EKD.DSNRequired"));
     }
 
-    // ── Filesystem -> DB sync ──
+    // ── Filesystem -> DB sync (GM only) ──
     // Scans all dice folders for dice.json files and updates the DB cache.
     // When changes are detected, dice classes and DSN presets are
     // registered on the fly — no page reload is ever required.
-    syncDiceFromFilesystem().then(({ changed, definitions }) => {
-        if (!changed) return;
-        registerDiceOnTheFly(definitions);
-    }).catch((err) => {
-        console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
-    });
+    // Only the GM can browse folders and write world settings.
+    if (game.user.isGM) {
+        syncDiceFromFilesystem().then(({ changed, definitions }) => {
+            if (!changed) return;
+            registerDiceOnTheFly(definitions);
+        }).catch((err) => {
+            console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
+        });
+    }
 });
 
 /* ---------------------------------------- */
