@@ -39,9 +39,6 @@ const _denomToGeo = new Map();
 /** geometry name -> BufferGeometry — cache of loaded GLB geometries. */
 const _loadedGeometries = new Map();
 
-/** geometry name -> file path — available GLB files in the geometries folder. */
-let _customGeoFiles = new Map();
-
 /* ---------------------------------------- */
 /*  Dynamic Dice Class Factory               */
 /* ---------------------------------------- */
@@ -174,25 +171,15 @@ function registerDiceOnTheFly(definitions) {
  * @param {object}   factory      DiceFactory instance (for loaderGLTF)
  */
 async function _updateGeometryMap(definitions, factory) {
-    // Refresh the available GLB files list
-    try {
-        const result = await FP.browse("data", GEOMETRIES_PATH);
-        _customGeoFiles.clear();
-        for (const fp of result.files || []) {
-            if (!fp.endsWith(".glb")) continue;
-            const name = fp.split("/").pop().replace(".glb", "");
-            _customGeoFiles.set(name, fp);
-        }
-    } catch (e) {
-        // Keep whatever we had before
-    }
-
     // Find dice that need custom geometry
     const customDefs = definitions.filter(
-        (d) => d.geometry !== "standard" && _customGeoFiles.has(d.geometry),
+        (d) => d.geometry && d.geometry !== "standard",
     );
 
-    // Load any geometry not yet cached
+    // Load any geometry not yet cached.
+    // GLB paths are constructed directly from the geometry name – no
+    // FP.browse needed, so this works for players too (THREE.js
+    // GLTFLoader uses a plain HTTP fetch, no FilePicker permission required).
     const toLoad = [
         ...new Set(
             customDefs
@@ -204,21 +191,29 @@ async function _updateGeometryMap(definitions, factory) {
         const loadPromises = toLoad.map(
             (geoName) =>
                 new Promise((resolve) => {
-                    const glbPath = _customGeoFiles.get(geoName);
-                    factory.loaderGLTF.load(glbPath, (gltf) => {
-                        let geometry = null;
-                        gltf.scene.traverse((child) => {
-                            if (child.isMesh && !geometry)
-                                geometry = child.geometry;
-                        });
-                        if (geometry) {
-                            _loadedGeometries.set(geoName, geometry);
-                            console.log(
-                                `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
-                            );
-                        }
-                        resolve();
-                    });
+                    const glbPath = `${GEOMETRIES_PATH}/${geoName}.glb`;
+                    factory.loaderGLTF.load(
+                        glbPath,
+                        (gltf) => {
+                            let geometry = null;
+                            gltf.scene.traverse((child) => {
+                                if (child.isMesh && !geometry)
+                                    geometry = child.geometry;
+                            });
+                            if (geometry) {
+                                _loadedGeometries.set(geoName, geometry);
+                                console.log(
+                                    `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
+                                );
+                            }
+                            resolve();
+                        },
+                        undefined,
+                        (err) => {
+                            console.warn(`${MODULE_ID} | Failed to load geometry "${geoName}":`, err);
+                            resolve();
+                        },
+                    );
                 }),
         );
         await Promise.all(loadPromises);
