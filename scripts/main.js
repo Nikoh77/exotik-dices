@@ -663,8 +663,12 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 /*  Dice So Nice Integration                 */
 /* ---------------------------------------- */
 
-// When the editor saves a dice, re-register from the updated DB cache.
-Hooks.on("ekdDiceChanged", () => {
+// When the diceDefinitions setting changes (on ANY client, including
+// players) re-register dice classes and DSN presets.  Foundry broadcasts
+// world-setting updates to every connected client via socket, so this
+// fires for players too when the GM saves a dice definition.
+Hooks.on("updateSetting", (setting) => {
+    if (setting?.key !== `${MODULE_ID}.diceDefinitions`) return;
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     registerDiceOnTheFly(definitions);
 });

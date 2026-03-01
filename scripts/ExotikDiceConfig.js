@@ -1107,7 +1107,6 @@ export class ExotikDiceConfig extends FormApplication {
             this._editingDice = null;
             this.render(true);
         }
-        Hooks.callAll("ekdDiceChanged");
     }
 
     /* ── Helpers ── */
