@@ -39,9 +39,6 @@ const _denomToGeo = new Map();
 /** geometry name -> BufferGeometry — cache of loaded GLB geometries. */
 const _loadedGeometries = new Map();
 
-/** geometry name -> file path — available GLB files in the geometries folder. */
-let _customGeoFiles = new Map();
-
 /* ---------------------------------------- */
 /*  Dynamic Dice Class Factory               */
 /* ---------------------------------------- */
@@ -174,25 +171,15 @@ function registerDiceOnTheFly(definitions) {
  * @param {object}   factory      DiceFactory instance (for loaderGLTF)
  */
 async function _updateGeometryMap(definitions, factory) {
-    // Refresh the available GLB files list
-    try {
-        const result = await FP.browse("data", GEOMETRIES_PATH);
-        _customGeoFiles.clear();
-        for (const fp of result.files || []) {
-            if (!fp.endsWith(".glb")) continue;
-            const name = fp.split("/").pop().replace(".glb", "");
-            _customGeoFiles.set(name, fp);
-        }
-    } catch (e) {
-        // Keep whatever we had before
-    }
-
     // Find dice that need custom geometry
     const customDefs = definitions.filter(
-        (d) => d.geometry !== "standard" && _customGeoFiles.has(d.geometry),
+        (d) => d.geometry && d.geometry !== "standard",
     );
 
-    // Load any geometry not yet cached
+    // Load any geometry not yet cached.
+    // GLB paths are constructed directly from the geometry name – no
+    // FP.browse needed, so this works for players too (THREE.js
+    // GLTFLoader uses a plain HTTP fetch, no FilePicker permission required).
     const toLoad = [
         ...new Set(
             customDefs
@@ -204,21 +191,29 @@ async function _updateGeometryMap(definitions, factory) {
         const loadPromises = toLoad.map(
             (geoName) =>
                 new Promise((resolve) => {
-                    const glbPath = _customGeoFiles.get(geoName);
-                    factory.loaderGLTF.load(glbPath, (gltf) => {
-                        let geometry = null;
-                        gltf.scene.traverse((child) => {
-                            if (child.isMesh && !geometry)
-                                geometry = child.geometry;
-                        });
-                        if (geometry) {
-                            _loadedGeometries.set(geoName, geometry);
-                            console.log(
-                                `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
-                            );
-                        }
-                        resolve();
-                    });
+                    const glbPath = `${GEOMETRIES_PATH}/${geoName}.glb`;
+                    factory.loaderGLTF.load(
+                        glbPath,
+                        (gltf) => {
+                            let geometry = null;
+                            gltf.scene.traverse((child) => {
+                                if (child.isMesh && !geometry)
+                                    geometry = child.geometry;
+                            });
+                            if (geometry) {
+                                _loadedGeometries.set(geoName, geometry);
+                                console.log(
+                                    `${MODULE_ID} | Geometry "${geoName}" loaded: ${geometry.attributes.position.count} vertices`,
+                                );
+                            }
+                            resolve();
+                        },
+                        undefined,
+                        (err) => {
+                            console.warn(`${MODULE_ID} | Failed to load geometry "${geoName}":`, err);
+                            resolve();
+                        },
+                    );
                 }),
         );
         await Promise.all(loadPromises);
@@ -364,16 +359,19 @@ Hooks.once("ready", () => {
         ui.notifications.warn(game.i18n.localize("EKD.DSNRequired"));
     }
 
-    // ── Filesystem -> DB sync ──
+    // ── Filesystem -> DB sync (GM only) ──
     // Scans all dice folders for dice.json files and updates the DB cache.
     // When changes are detected, dice classes and DSN presets are
     // registered on the fly — no page reload is ever required.
-    syncDiceFromFilesystem().then(({ changed, definitions }) => {
-        if (!changed) return;
-        registerDiceOnTheFly(definitions);
-    }).catch((err) => {
-        console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
-    });
+    // Only the GM can browse folders and write world settings.
+    if (game.user.isGM) {
+        syncDiceFromFilesystem().then(({ changed, definitions }) => {
+            if (!changed) return;
+            registerDiceOnTheFly(definitions);
+        }).catch((err) => {
+            console.error(`${MODULE_ID} | syncDiceFromFilesystem error:`, err);
+        });
+    }
 });
 
 /* ---------------------------------------- */
@@ -466,10 +464,12 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     const langNames = { en: "English", it: "Italiano" };
     const curLang = game.i18n.lang || "en";
     const langDisplay = langNames[curLang] || curLang;
+    const moduleVersion = game.modules.get(MODULE_ID)?.version ?? "";
 
     let listHtml = `<div class="ekd-settings-dice">`;
     listHtml += `<div class="ekd-settings-header">`;
     listHtml += `<span class="ekd-settings-lang"><i class="fas fa-globe"></i> ${langDisplay}</span>`;
+    listHtml += `<span class="ekd-settings-version"><i class="fas fa-tag"></i> v${moduleVersion}</span>`;
     listHtml += `<button type="button" class="ekd-settings-help"><i class="fas fa-book-open"></i> ${t.readme}</button>`;
     listHtml += `</div>`;
     listHtml += `<div class="ekd-folder-hints">`;
@@ -658,8 +658,12 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
 /*  Dice So Nice Integration                 */
 /* ---------------------------------------- */
 
-// When the editor saves a dice, re-register from the updated DB cache.
-Hooks.on("ekdDiceChanged", () => {
+// When the diceDefinitions setting changes (on ANY client, including
+// players) re-register dice classes and DSN presets.  Foundry broadcasts
+// world-setting updates to every connected client via socket, so this
+// fires for players too when the GM saves a dice definition.
+Hooks.on("updateSetting", (setting) => {
+    if (setting?.key !== `${MODULE_ID}.diceDefinitions`) return;
     const definitions = game.settings.get(MODULE_ID, "diceDefinitions") || [];
     registerDiceOnTheFly(definitions);
 });
@@ -735,7 +739,7 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
                 const ekdSys = this.systems?.get("ekd");
                 const preset = ekdSys?.dice?.get(i);
                 if (preset && !preset.modelLoaded) {
-                    console.warn(
+                    console.debug(
                         `${MODULE_ID} | Preset ${i} textures not yet loaded – awaiting…`,
                     );
                     await preset.loadTextures();

@@ -2,7 +2,7 @@
     "id": "exotik-dices",
     "title": "Exotik Dices",
     "description": "Adds Exotik Dices to Dice So Nice!",
-    "version": "0.1.0",
+    "version": "0.2.1",
     "compatibility": {
         "minimum": "13",
         "verified": "13"
