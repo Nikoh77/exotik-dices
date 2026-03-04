@@ -66,3 +66,4 @@ assets/github/*
 assets/dices/*/
 !assets/dices/come_quando_fuori_piove/
 !assets/dices/come_quando_fuori_piove/**
+COPILOT_CONTEXT.md
