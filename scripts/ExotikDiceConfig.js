@@ -151,15 +151,38 @@ export function markdownToHtml(md) {
 }
 
 /* ═══════════════════════════════════════════════ */
-/*  ExotikDiceConfig FormApplication              */
+/*  ExotikDiceConfig – ApplicationV2              */
 /* ═══════════════════════════════════════════════ */
 
-export class ExotikDiceConfig extends FormApplication {
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+
+export class ExotikDiceConfig extends HandlebarsApplicationMixin(ApplicationV2) {
     /** @type {Array|null} Cached custom geometry scan results. */
     static _geometriesCache = null;
 
-    constructor(object = {}, options = {}) {
-        super(object, options);
+    static DEFAULT_OPTIONS = {
+        id: "ekd-dice-config",
+        classes: ["ekd-config"],
+        position: { width: 640, height: "auto" },
+        window: { resizable: true },
+        form: {
+            handler: ExotikDiceConfig._onFormSubmit,
+            closeOnSubmit: false,
+            submitOnChange: false,
+        },
+        actions: {
+            addDice: ExotikDiceConfig._onAddDiceAction,
+            goBack: ExotikDiceConfig._onGoBackAction,
+            editDice: ExotikDiceConfig._onEditDiceAction,
+        },
+    };
+
+    static PARTS = {
+        form: { template: `modules/${MODULE_ID}/templates/dice-config.hbs` },
+    };
+
+    constructor(options = {}) {
+        super(options);
         /** null = list view; object = editing that dice. */
         this._editingDice = null;
         /** Reference to the SettingsConfig app (for refresh after save). */
@@ -232,22 +255,7 @@ export class ExotikDiceConfig extends FormApplication {
                 })),
             };
         }
-        config.render(true);
-    }
-
-    /* ── FormApplication overrides ── */
-
-    static get defaultOptions() {
-        return foundry.utils.mergeObject(super.defaultOptions, {
-            id: "ekd-dice-config",
-            template: `modules/${MODULE_ID}/templates/dice-config.hbs`,
-            width: 640,
-            height: "auto",
-            closeOnSubmit: false,
-            submitOnChange: false,
-            resizable: true,
-            classes: ["ekd-config"],
-        });
+        config.render({ force: true });
     }
 
     get title() {
@@ -261,53 +269,12 @@ export class ExotikDiceConfig extends FormApplication {
         return game.i18n.localize("EKD.Config.Title");
     }
 
-    /** Scan geometries before every render. */
-    async _render(force, options) {
+    /* ── Data for Handlebars (V2) ── */
+
+    async _prepareContext(options) {
         if (!ExotikDiceConfig._geometriesCache) {
             await ExotikDiceConfig.scanGeometries();
         }
-        const result = await super._render(force, options);
-
-        // V1 FormApplication doesn't participate in Foundry v13's
-        // theme system.  Detect the active theme and propagate it
-        // to our window element so CSS can style accordingly.
-        this._applyThemeAttribute();
-
-        return result;
-    }
-
-    /**
-     * Detect the active Foundry UI theme and set a data attribute
-     * on our window element.  This lets CSS target dark/light mode
-     * for V1 apps that don't inherit V2's theme properties.
-     *
-     * Uses ONLY the Foundry core setting "core.uiTheme" (v13) as the
-     * source of truth.  Other heuristics (color-scheme, body classes)
-     * produce false positives (e.g. OS dark mode ≠ Foundry dark theme).
-     */
-    _applyThemeAttribute() {
-        const el = this.element?.[0] ?? this.element;
-        if (!el) return;
-
-        let theme = "light";
-        try {
-            const v = game.settings.get("core", "uiTheme");
-            if (typeof v === "string") theme = v.toLowerCase();
-        } catch {
-            // Fallback: try older setting key
-            try {
-                const v = game.settings.get("core", "theme");
-                if (typeof v === "string") theme = v.toLowerCase();
-            } catch { /* not available */ }
-        }
-
-        const isDark = theme === "dark";
-        el.setAttribute("data-ekd-theme", isDark ? "dark" : "light");
-    }
-
-    /* ── Data for Handlebars ── */
-
-    getData() {
         return this._editingDice ? this._getEditorData() : this._getListData();
     }
 
@@ -420,42 +387,38 @@ export class ExotikDiceConfig extends FormApplication {
         return { editing: false, diceList };
     }
 
-    /* ── Listeners ── */
+    /* ── Post-render (V2 lifecycle) ── */
 
-    activateListeners(html) {
-        super.activateListeners(html);
-        const el = html instanceof HTMLElement ? html : (html?.[0] ?? html);
+    _onRender(context, options) {
+        const el = this.element;
         if (!el) return;
 
-        // Delegated click handler
-        el.addEventListener("click", (event) => {
-            const t = event.target;
-            if (t.closest(".ekd-add-dice")) {
+        // Autocomplete off on the form
+        const form = el.querySelector("form");
+        if (form) form.setAttribute("autocomplete", "off");
+
+        // File picker buttons – V2 doesn't auto-handle .file-picker class
+        for (const btn of el.querySelectorAll(".file-picker")) {
+            btn.addEventListener("click", (event) => {
                 event.preventDefault();
-                event.stopPropagation();
-                return this._onAddDice(event);
-            }
-            if (t.closest(".ekd-edit")) {
-                event.preventDefault();
-                event.stopPropagation();
-                return this._onEditDice(event);
-            }
-            if (t.closest(".ekd-back")) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (this._settingsApp) {
-                    this.close();
-                } else {
-                    this._editingDice = null;
-                    setTimeout(() => this.render(true), 0);
-                }
-            }
-        });
+                const target = btn.dataset.target;
+                const input = el.querySelector(`input[name="${target}"]`);
+                const fp = new FilePicker({
+                    type: btn.dataset.type || "any",
+                    current: input?.value || "",
+                    callback: (path) => {
+                        input.value = path;
+                        input.dispatchEvent(new Event("change"));
+                    },
+                });
+                fp.render(true);
+            });
+        }
 
         if (this._editingDice) {
             // Snapshot for dirty tracking (only on first render of edit session)
             if (!this._originalSnapshot) {
-                this._originalSnapshot = JSON.stringify(this._getSubmitData());
+                this._originalSnapshot = JSON.stringify(this._getFormObject());
             }
 
             // Faces count change → resize faceMap + re-render
@@ -477,17 +440,17 @@ export class ExotikDiceConfig extends FormApplication {
                         });
                     }
                     this._editingDice.faceMap.length = newLen;
-                    setTimeout(() => this.render(true), 0);
+                    setTimeout(() => this.render({ force: true }), 0);
                 },
             );
 
             // Reference dropdown change → re-render
-            el.querySelectorAll(".ekd-ref-select").forEach((sel) => {
+            for (const sel of el.querySelectorAll(".ekd-ref-select")) {
                 sel.addEventListener("change", () => {
                     this._captureFormData();
-                    setTimeout(() => this.render(true), 0);
+                    setTimeout(() => this.render({ force: true }), 0);
                 });
-            });
+            }
 
             // Geometry dropdown change → refresh 3D preview
             el.querySelector('[name="geometry"]')?.addEventListener(
@@ -496,35 +459,48 @@ export class ExotikDiceConfig extends FormApplication {
             );
 
             // Live image previews
-            el.querySelectorAll("input.image").forEach((input) => {
+            for (const input of el.querySelectorAll("input.image")) {
                 input.addEventListener("change", (e) => this._onImageChange(e));
-            });
+            }
 
-            // Dirty tracking on all inputs
-            el.addEventListener("input", () => this._checkDirty(el));
-            el.addEventListener("change", () => this._checkDirty(el));
+            // Dirty tracking on form content (form is replaced each render, no stacking)
+            if (form) {
+                form.addEventListener("input", () => this._checkDirty());
+                form.addEventListener("change", () => this._checkDirty());
+            }
 
             // Initialize DSN 3D preview
             this._initDSNPreview(el);
         }
     }
 
+    /* ── Form data helpers ── */
+
+    _getFormObject() {
+        const form = this.element?.querySelector("form");
+        if (!form) return {};
+        const fd = new FormData(form);
+        const obj = {};
+        for (const [k, v] of fd.entries()) obj[k] = v;
+        return obj;
+    }
+
     /* ── Dirty tracking ── */
 
-    _checkDirty(el) {
+    _checkDirty() {
         try {
-            const current = JSON.stringify(this._getSubmitData());
+            const current = JSON.stringify(this._getFormObject());
             const isDirty = current !== this._originalSnapshot;
-            const btn = el?.querySelector?.(".ekd-save-btn");
+            const btn = this.element?.querySelector(".ekd-save-btn");
             if (btn) btn.disabled = !isDirty;
         } catch {
             /* ignore */
         }
     }
 
-    /* ── List mode handlers ── */
+    /* ── V2 Action handlers ── */
 
-    _onAddDice(event) {
+    static _onAddDiceAction(event, target) {
         event.preventDefault();
         this._originalSnapshot = null;
         this._editingDice = {
@@ -542,12 +518,12 @@ export class ExotikDiceConfig extends FormApplication {
                 icon: "",
             })),
         };
-        setTimeout(() => this.render(true), 0);
+        setTimeout(() => this.render({ force: true }), 0);
     }
 
-    _onEditDice(event) {
+    static _onEditDiceAction(event, target) {
         event.preventDefault();
-        const id = event.target.closest("[data-id]")?.dataset?.id;
+        const id = target.closest("[data-id]")?.dataset?.id;
         if (!id) return;
         const defs = game.settings.get(MODULE_ID, "diceDefinitions") || [];
         const dice = defs.find((d) => d.id === id);
@@ -561,7 +537,17 @@ export class ExotikDiceConfig extends FormApplication {
         }
         this._originalSnapshot = null;
         this._editingDice = foundry.utils.deepClone(dice);
-        setTimeout(() => this.render(true), 0);
+        setTimeout(() => this.render({ force: true }), 0);
+    }
+
+    static _onGoBackAction(event, target) {
+        event.preventDefault();
+        if (this._settingsApp) {
+            this.close();
+        } else {
+            this._editingDice = null;
+            setTimeout(() => this.render({ force: true }), 0);
+        }
     }
 
     /* ── Editor mode handlers ── */
@@ -927,12 +913,13 @@ export class ExotikDiceConfig extends FormApplication {
         return super.close(options);
     }
 
-    /* ── Persistence ── */
+    /* ── Persistence (V2 form handler) ── */
 
-    async _updateObject(_event, formData) {
+    static async _onFormSubmit(event, form, formData) {
+        // V2 calls this with .call(instance, ...) so 'this' is the app instance
         if (!this._editingDice) return;
 
-        const expanded = foundry.utils.expandObject(formData);
+        const expanded = foundry.utils.expandObject(formData.object);
         const currentDefs =
             game.settings.get(MODULE_ID, "diceDefinitions") || [];
 
@@ -1067,7 +1054,7 @@ export class ExotikDiceConfig extends FormApplication {
             if (this._settingsApp) this.close();
             else {
                 this._editingDice = null;
-                setTimeout(() => this.render(true), 0);
+                setTimeout(() => this.render({ force: true }), 0);
             }
             return;
         }
@@ -1141,14 +1128,14 @@ export class ExotikDiceConfig extends FormApplication {
             this.close();
         } else {
             this._editingDice = null;
-            this.render(true);
+            this.render({ force: true });
         }
     }
 
     /* ── Helpers ── */
 
     _captureFormData() {
-        const formData = this._getSubmitData();
+        const formData = this._getFormObject();
         const exp = foundry.utils.expandObject(formData);
         this._editingDice.name = exp.name ?? this._editingDice.name;
         if (!this._editingDice.slug) {

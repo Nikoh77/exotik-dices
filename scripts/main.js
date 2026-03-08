@@ -254,14 +254,20 @@ function registerSettings() {
         default: DEFAULT_USER_DICES_PATH,
     });
 
-    game.settings.registerMenu(MODULE_ID, "diceConfig", {
-        name: "EKD.Settings.ConfigureDice",
-        label: "EKD.Settings.ConfigureLabel",
-        hint: "EKD.Settings.ConfigureHint",
-        icon: "fas fa-dice",
-        type: ExotikDiceConfig,
-        restricted: true,
-    });
+    // registerMenu may not fully support V2 ApplicationV2 in v13.
+    // Settings injection is the primary UX; this is just a fallback.
+    try {
+        game.settings.registerMenu(MODULE_ID, "diceConfig", {
+            name: "EKD.Settings.ConfigureDice",
+            label: "EKD.Settings.ConfigureLabel",
+            hint: "EKD.Settings.ConfigureHint",
+            icon: "fas fa-dice",
+            type: ExotikDiceConfig,
+            restricted: true,
+        });
+    } catch {
+        console.warn(`${MODULE_ID} | registerMenu fallback not available (V2 app)`);
+    }
 }
 
 /* ---------------------------------------- */

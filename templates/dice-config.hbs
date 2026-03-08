@@ -6,7 +6,7 @@
     <!-- ═══════════════════════════════════════ -->
 
     <div class="ekd-editor-toolbar">
-        <a class="ekd-back"><i class="fas fa-arrow-left"></i> {{localize "EKD.Editor.BackToList"}}</a>
+        <a class="ekd-back" data-action="goBack"><i class="fas fa-arrow-left"></i> {{localize "EKD.Editor.BackToList"}}</a>
     </div>
 
     <!-- Name -->
@@ -177,7 +177,7 @@
             <span class="ekd-dice-geometry flex1">{{this.geometryLabel}}</span>
             <div class="ekd-dice-controls flex0">
                 {{#unless this.isDefault}}
-                <a class="ekd-edit" data-id="{{this.id}}" title="{{localize 'EKD.Config.Edit'}}">
+                <a class="ekd-edit" data-action="editDice" data-id="{{this.id}}" title="{{localize 'EKD.Config.Edit'}}">
                     <i class="fas fa-edit"></i>
                 </a>
                 {{/unless}}
@@ -190,7 +190,7 @@
     {{/if}}
 
     <div class="ekd-config-buttons">
-        <button type="button" class="ekd-add-dice">
+        <button type="button" class="ekd-add-dice" data-action="addDice">
             <i class="fas fa-plus"></i> {{localize "EKD.Config.AddDice"}}
         </button>
     </div>
