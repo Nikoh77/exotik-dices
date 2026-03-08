@@ -280,33 +280,28 @@ export class ExotikDiceConfig extends FormApplication {
      * Detect the active Foundry UI theme and set a data attribute
      * on our window element.  This lets CSS target dark/light mode
      * for V1 apps that don't inherit V2's theme properties.
+     *
+     * Uses ONLY the Foundry core setting "core.uiTheme" (v13) as the
+     * source of truth.  Other heuristics (color-scheme, body classes)
+     * produce false positives (e.g. OS dark mode ≠ Foundry dark theme).
      */
     _applyThemeAttribute() {
         const el = this.element?.[0] ?? this.element;
         if (!el) return;
 
-        let isDark = false;
-
-        // 1. Check computed color-scheme on the document root
+        let theme = "light";
         try {
-            const cs = getComputedStyle(document.documentElement).colorScheme;
-            if (cs?.includes("dark")) isDark = true;
-        } catch { /* ignore */ }
+            const v = game.settings.get("core", "uiTheme");
+            if (typeof v === "string") theme = v.toLowerCase();
+        } catch {
+            // Fallback: try older setting key
+            try {
+                const v = game.settings.get("core", "theme");
+                if (typeof v === "string") theme = v.toLowerCase();
+            } catch { /* not available */ }
+        }
 
-        // 2. Check data-theme attributes on html/body
-        if (document.documentElement.dataset.theme?.includes("dark")) isDark = true;
-        if (document.body.dataset.theme?.includes("dark")) isDark = true;
-
-        // 3. Check body class indicators
-        const cl = document.body.classList;
-        if (cl.contains("dark-mode") || cl.contains("theme-dark")) isDark = true;
-
-        // 4. Check Foundry core settings
-        try {
-            const theme = game.settings.get("core", "theme");
-            if (typeof theme === "string" && theme.toLowerCase().includes("dark")) isDark = true;
-        } catch { /* setting not available yet */ }
-
+        const isDark = theme === "dark";
         el.setAttribute("data-ekd-theme", isDark ? "dark" : "light");
     }
 
