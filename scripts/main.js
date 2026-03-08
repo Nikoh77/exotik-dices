@@ -452,7 +452,6 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         hintNote: game.i18n.localize("EKD.Config.HintNote"),
         addDice: game.i18n.localize("EKD.Config.AddDice"),
         refresh: game.i18n.localize("EKD.Config.Refresh"),
-        edit: game.i18n.localize("EKD.Config.Edit"),
         exp: game.i18n.localize("EKD.Config.Export"),
         imp: game.i18n.localize("EKD.Config.Import"),
         faces: game.i18n.localize("EKD.Config.FacesLabel"),
@@ -510,17 +509,14 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
         for (const d of definitions) {
             // Dice shipped with the module (under modules/ path) are read-only
             const isModuleDice = d.slug && d.faceMap?.[0]?.texture?.startsWith?.(`modules/${MODULE_ID}/`);
-            const editBtn = isModuleDice
-                ? ""
-                : `<a class="ekd-settings-edit" title="${t.edit}"><i class="fas fa-edit"></i></a>`;
+            const rowClass = isModuleDice ? "ekd-settings-entry" : "ekd-settings-entry ekd-settings-clickable";
             listHtml += `
-                <li class="ekd-settings-entry flexrow" data-id="${d.id}">
+                <li class="${rowClass} flexrow" data-id="${d.id}">
                     <span class="ekd-settings-name flex2">${d.name}</span>
                     <span class="ekd-settings-denom flex0">d${d.denomination}</span>
                     <span class="ekd-settings-faces flex0">${d.faces} ${t.faces}</span>
                     <span class="ekd-settings-controls flex0">
                         <a class="ekd-settings-export" title="${t.exp}"><i class="fas fa-file-export"></i></a>
-                        ${editBtn}
                     </span>
                 </li>`;
         }
@@ -540,19 +536,21 @@ Hooks.on("renderSettingsConfig", (app, ...renderArgs) => {
     injected.addEventListener("click", (event) => {
         const target = event.target;
 
-        if (target.closest(".ekd-settings-edit")) {
-            event.preventDefault();
-            const id = target.closest("[data-id]")?.dataset.id;
-            const dice = definitions.find((d) => d.id === id);
-            if (!dice) return;
-            ExotikDiceConfig.editDice(dice, app);
-        }
-
         if (target.closest(".ekd-settings-export")) {
             event.preventDefault();
             const id = target.closest("[data-id]")?.dataset.id;
             const dice = definitions.find((d) => d.id === id);
             if (dice) exportDice(dice);
+            return;
+        }
+
+        if (target.closest(".ekd-settings-clickable")) {
+            event.preventDefault();
+            const id = target.closest("[data-id]")?.dataset.id;
+            const dice = definitions.find((d) => d.id === id);
+            if (!dice) return;
+            ExotikDiceConfig.editDice(dice, app);
+            return;
         }
 
         if (target.closest(".ekd-settings-add")) {
