@@ -152,28 +152,11 @@
 }
 
 /* ============================================= */
-/*  Dice editor – theme-aware                    */
+/*  Dice editor (inline in config)               */
+/*  No background/color overrides: Foundry's     */
+/*  .window-app .window-content handles theming   */
+/*  natively for both light and dark themes.      */
 /* ============================================= */
-
-.ekd-config {
-    color: var(--color-text-primary, inherit);
-}
-
-.ekd-config .window-content {
-    background: var(--color-bg, var(--sheet-background, revert));
-    color: var(--color-text-primary, inherit);
-}
-
-.ekd-config input[type="text"],
-.ekd-config select {
-    background: var(--color-bg-input, var(--input-background-color, revert));
-    color: var(--color-text-primary, inherit);
-    border-color: var(--color-border-light-tertiary, #999);
-}
-
-.ekd-config fieldset {
-    border-color: var(--color-border-light-tertiary, #ccc);
-}
 
 .ekd-config .ekd-editor-toolbar {
     margin-bottom: 8px;
