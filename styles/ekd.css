@@ -152,11 +152,91 @@
 }
 
 /* ============================================= */
-/*  Dice editor (inline in config)               */
-/*  No background/color overrides: Foundry's     */
-/*  .window-app .window-content handles theming   */
-/*  natively for both light and dark themes.      */
+/*  Dice editor – V1 theme support               */
+/*  V1 FormApplication doesn't participate in    */
+/*  Foundry v13's theme system.  JS sets          */
+/*  data-ekd-theme="dark" on the window element.  */
 /* ============================================= */
+
+/* ── Dark theme overrides ────────────────────── */
+
+.ekd-config[data-ekd-theme="dark"] .window-header {
+    background: #1a1a1a;
+    color: #dcdcdc;
+    border-bottom-color: #444;
+}
+
+.ekd-config[data-ekd-theme="dark"] .window-header a {
+    color: #ccc;
+}
+
+.ekd-config[data-ekd-theme="dark"] .window-content {
+    background: #222;
+    color: #dcdcdc;
+}
+
+.ekd-config[data-ekd-theme="dark"] label {
+    color: #ccc;
+}
+
+.ekd-config[data-ekd-theme="dark"] h3 {
+    color: #eee;
+    border-bottom-color: #555;
+}
+
+.ekd-config[data-ekd-theme="dark"] input[type="text"],
+.ekd-config[data-ekd-theme="dark"] select,
+.ekd-config[data-ekd-theme="dark"] textarea {
+    background: #2d2d2d;
+    color: #ddd;
+    border-color: #555;
+}
+
+.ekd-config[data-ekd-theme="dark"] input[type="text"]:focus,
+.ekd-config[data-ekd-theme="dark"] select:focus {
+    border-color: #777;
+    box-shadow: 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+.ekd-config[data-ekd-theme="dark"] button {
+    background: #333;
+    color: #ddd;
+    border-color: #555;
+}
+
+.ekd-config[data-ekd-theme="dark"] button:hover {
+    background: #444;
+    color: #fff;
+}
+
+.ekd-config[data-ekd-theme="dark"] .notes {
+    color: #aaa;
+}
+
+.ekd-config[data-ekd-theme="dark"] fieldset,
+.ekd-config[data-ekd-theme="dark"] .ekd-face-entry {
+    border-color: #444;
+}
+
+.ekd-config[data-ekd-theme="dark"] legend {
+    color: #ccc;
+}
+
+.ekd-config[data-ekd-theme="dark"] .ekd-face-preview {
+    border-color: #555;
+    background: #2a2a2a;
+}
+
+.ekd-config[data-ekd-theme="dark"] .ekd-asset-path {
+    background: #2a2a2a;
+    color: #bbb;
+}
+
+.ekd-config[data-ekd-theme="dark"] .file-picker {
+    background: #333;
+    color: #ccc;
+    border-color: #555;
+}
 
 .ekd-config .ekd-editor-toolbar {
     margin-bottom: 8px;

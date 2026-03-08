@@ -266,7 +266,48 @@ export class ExotikDiceConfig extends FormApplication {
         if (!ExotikDiceConfig._geometriesCache) {
             await ExotikDiceConfig.scanGeometries();
         }
-        return super._render(force, options);
+        const result = await super._render(force, options);
+
+        // V1 FormApplication doesn't participate in Foundry v13's
+        // theme system.  Detect the active theme and propagate it
+        // to our window element so CSS can style accordingly.
+        this._applyThemeAttribute();
+
+        return result;
+    }
+
+    /**
+     * Detect the active Foundry UI theme and set a data attribute
+     * on our window element.  This lets CSS target dark/light mode
+     * for V1 apps that don't inherit V2's theme properties.
+     */
+    _applyThemeAttribute() {
+        const el = this.element?.[0] ?? this.element;
+        if (!el) return;
+
+        let isDark = false;
+
+        // 1. Check computed color-scheme on the document root
+        try {
+            const cs = getComputedStyle(document.documentElement).colorScheme;
+            if (cs?.includes("dark")) isDark = true;
+        } catch { /* ignore */ }
+
+        // 2. Check data-theme attributes on html/body
+        if (document.documentElement.dataset.theme?.includes("dark")) isDark = true;
+        if (document.body.dataset.theme?.includes("dark")) isDark = true;
+
+        // 3. Check body class indicators
+        const cl = document.body.classList;
+        if (cl.contains("dark-mode") || cl.contains("theme-dark")) isDark = true;
+
+        // 4. Check Foundry core settings
+        try {
+            const theme = game.settings.get("core", "theme");
+            if (typeof theme === "string" && theme.toLowerCase().includes("dark")) isDark = true;
+        } catch { /* setting not available yet */ }
+
+        el.setAttribute("data-ekd-theme", isDark ? "dark" : "light");
     }
 
     /* ── Data for Handlebars ── */
