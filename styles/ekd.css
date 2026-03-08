@@ -189,12 +189,26 @@
 }
 
 .ekd-config .ekd-face-entry .form-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
     margin-bottom: 4px;
+}
+
+.ekd-config .ekd-face-entry .form-group > label {
+    flex: 0 0 100%;
+}
+
+.ekd-config .ekd-face-entry .form-fields {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 4px;
 }
 
 .ekd-config .ekd-face-entry label {
     font-size: 11px;
-    flex: 0 0 80px;
 }
 
 /* Image preview thumbnails (inline with file-picker + input) */
