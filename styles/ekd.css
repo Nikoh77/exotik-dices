@@ -226,7 +226,7 @@
 .ekd-asset-hint .ekd-asset-path {
     font-size: 11px;
     padding: 2px 6px;
-    background: var(--color-bg-option, #eee);
+    background: color-mix(in srgb, currentColor 8%, transparent);
     border-radius: 3px;
     word-break: break-all;
 }
@@ -276,10 +276,10 @@
     width: 260px;
     height: 260px;
     margin: 12px auto;
-    border: 1px solid #666;
+    border: none;
     border-radius: 8px;
     overflow: hidden;
-    background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+    background: transparent;
     position: relative;
 }
 

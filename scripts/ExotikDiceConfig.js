@@ -617,6 +617,15 @@ export class ExotikDiceConfig extends HandlebarsApplicationMixin(ApplicationV2) 
             this._previewBox = box;
             this._previewContainer = canvasDiv;
 
+            // Make the scene background transparent so the die
+            // floats over the window's own background color.
+            if (box.scene) {
+                box.scene.background = null;
+            }
+            if (box.renderer) {
+                box.renderer.setClearColor(0x000000, 0);
+            }
+
             // Boost lighting for better visibility
             if (box.scene) {
                 // Increase all existing lights significantly
